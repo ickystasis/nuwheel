@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wheel of Doom(b)</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🎡 Wheel of Doom<sup>(b)</sup></h1>
+        </header>
+
+        <!-- Add Movie -->
+        <div class="add-section">
+            <input type="text" id="movieInput" placeholder="Enter a movie name..." maxlength="200" />
+            <button id="addBtn" class="btn btn-add">➕ Add Movie</button>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Movie List -->
+            <div class="list-panel">
+                <h2>Movie List</h2>
+                <ul id="movieList"></ul>
+                <p id="emptyMsg" class="empty-msg">No movies yet! Add some above. ✨</p>
+                <button id="clearBtn" class="btn btn-clear">🗑️ Clear All</button>
+            </div>
+
+            <!-- Wheel Panel -->
+            <div class="wheel-panel">
+                <div class="wheel-wrapper">
+                    <div class="pointer">▼</div>
+                    <canvas id="wheelCanvas" width="400" height="400"></canvas>
+                </div>
+                <button id="spinBtn" class="btn btn-spin" disabled>🎯 SPIN!</button>
+
+                <!-- Winner Display -->
+                <div id="winnerDisplay" class="winner-display hidden">
+                    <span id="winnerText" class="winner-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

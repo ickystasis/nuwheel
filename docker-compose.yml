@@ -1,0 +1,22 @@
+# ============================================================
+#  Docker Compose — Wheel of Doom(b)
+#  Single container, mapped data volume, port 9642
+# ============================================================
+
+services:
+  wheel:
+    build: .
+    container_name: wheel-of-doomb
+    ports:
+      - "9642:9642"
+    volumes:
+      # Persist SQLite database on host
+      - wheel-data:/data
+      # OR: uncomment below to use a local directory instead
+      # - ./data:/data
+    restart: unless-stopped
+    environment:
+      - DB_DIR=/data
+
+volumes:
+  wheel-data:
