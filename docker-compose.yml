@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
     environment:
       - DB_DIR=/data
+      # ⚠️ CHANGE THIS before deploying to a shared network
       - ADMIN_PASSWORD=setadminpass
 
 volumes:
