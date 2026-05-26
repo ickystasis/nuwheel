@@ -22,8 +22,10 @@ def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
             (watcher_id,)
         ).fetchone()['t']
     personal_budget = max(1, watcher['points'])
-    max_for_this = max(1, personal_budget - other_total)
-    return min(points, max_for_this)
+    remaining = personal_budget - other_total
+    if remaining < 0:
+        remaining = 0
+    return round(min(points, remaining), 2)
 
 
 # ── Data ──
@@ -32,7 +34,7 @@ def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
 def get_data():
     """Get all watchers with their titles and points."""
     db = get_db(current_app)
-    watchers = db.execute('SELECT id, name, points FROM watchers ORDER BY created_at ASC').fetchall()
+    watchers = db.execute('SELECT id, name, points, punish_streak FROM watchers ORDER BY created_at ASC').fetchall()
     result = []
     for w in watchers:
         titles = db.execute(
@@ -43,6 +45,7 @@ def get_data():
             'id': w['id'],
             'name': w['name'],
             'points': w['points'],
+            'punish_streak': w['punish_streak'],
             'titles': [dict(t) for t in titles],
         })
     return jsonify(result)
@@ -140,16 +143,18 @@ def add_title():
         return jsonify({'error': 'watcher_id is required'}), 400
 
     try:
-        points = int(data.get('points', 1))
+        points = float(data.get('points', 1))
     except (TypeError, ValueError):
         return jsonify({'error': 'Points must be a number'}), 400
-    if points < 1 or points > 100:
-        return jsonify({'error': 'Points must be between 1 and 100'}), 400
+    if points > 100:
+        return jsonify({'error': 'Points must be 100 or less'}), 400
 
     db = get_db(current_app)
 
     # Enforce point budget: total title points cannot exceed watcher's personal points
     points = _enforce_title_budget(db, watcher_id, points)
+    if points < 0.1:
+        return jsonify({'error': 'Not enough budget remaining for this title (min 0.1)'}), 400
 
     count = db.execute(
         'SELECT COUNT(*) as c FROM titles WHERE watcher_id = ?', (watcher_id,)
@@ -184,16 +189,18 @@ def update_title(title_id):
 
     if 'points' in data:
         try:
-            points = int(data['points'])
+            points = float(data['points'])
         except (TypeError, ValueError):
             return jsonify({'error': 'Points must be a number'}), 400
-        if points < 1 or points > 100:
-            return jsonify({'error': 'Points must be between 1 and 100'}), 400
+        if points > 100:
+            return jsonify({'error': 'Points must be 100 or less'}), 400
 
         # Enforce point budget
         title_row = db.execute('SELECT watcher_id FROM titles WHERE id = ?', (title_id,)).fetchone()
         if title_row:
             points = _enforce_title_budget(db, title_row['watcher_id'], points, exclude_title_id=title_id)
+        if points < 0.1:
+            return jsonify({'error': 'Not enough budget remaining for this title (min 0.1)'}), 400
 
         updates.append('points = ?')
         params.append(points)
@@ -363,7 +370,7 @@ def process_win():
 
 @bp.route('/spin/punish', methods=['POST'])
 def punish_movie():
-    """Non-winners each steal 1 point from the winner."""
+    """Non-winners each steal (streak+1) points from the winner. Streak increments."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'Request body required'}), 400
@@ -375,10 +382,14 @@ def punish_movie():
 
     db = get_db(current_app)
 
-    # Get winner
-    winner = db.execute('SELECT id, name, points FROM watchers WHERE id = ?', (winner_id,)).fetchone()
+    # Get winner with streak info
+    winner = db.execute('SELECT id, name, points, punish_streak FROM watchers WHERE id = ?', (winner_id,)).fetchone()
     if not winner:
         return jsonify({'error': 'Winner not found'}), 404
+
+    # Streak multiplier: first punish = 1, second = 2, third = 3, etc.
+    streak = winner['punish_streak']
+    multiplier = streak + 1
 
     stolen_from = []
     total_theft = 0
@@ -391,35 +402,66 @@ def punish_movie():
         if not participant:
             continue
 
-        # Each non-winner steals 1 point — give them +1 immediately
-        db.execute('UPDATE watchers SET points = points + 1 WHERE id = ?', (pid,))
+        # Each non-winner steals `multiplier` points from the winner
+        db.execute('UPDATE watchers SET points = points + ? WHERE id = ?', (multiplier, pid))
 
-        # Record the theft
-        db.execute('INSERT INTO thefts (thief_id, victim_id, amount) VALUES (?, ?, 1)',
-                   (pid, winner_id))
+        # Record the theft with the multiplied amount
+        db.execute('INSERT INTO thefts (thief_id, victim_id, amount) VALUES (?, ?, ?)',
+                   (pid, winner_id, multiplier))
 
         stolen_from.append({
             'thief_name': participant['name'],
             'thief_id': pid,
-            'amount': 1,
+            'amount': multiplier,
         })
-        total_theft += 1
+        total_theft += multiplier
 
     # Single winner update: deduct total stolen points at once
     if total_theft > 0:
         new_winner_pts = winner['points'] - total_theft
         db.execute('UPDATE watchers SET points = ? WHERE id = ?', (new_winner_pts, winner_id))
 
+    # Increment punish streak after this punish
+    db.execute('UPDATE watchers SET punish_streak = ? WHERE id = ?', (streak + 1, winner_id))
+
     db.commit()
 
     socketio.emit('data_changed', {})
 
-    # Get final winner points
-    final_winner = db.execute('SELECT id, name, points FROM watchers WHERE id = ?', (winner_id,)).fetchone()
+    # Get final winner points and streak
+    final_winner = db.execute('SELECT id, name, points, punish_streak FROM watchers WHERE id = ?', (winner_id,)).fetchone()
 
     return jsonify({
         'stolen_from': stolen_from,
         'total_theft': total_theft,
+        'winner': dict(final_winner) if final_winner else None,
+        'multiplier': multiplier,
+    })
+
+
+@bp.route('/spin/pass', methods=['POST'])
+def pass_movie():
+    """When a movie passes, reset the watcher's punish streak to 0."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+
+    winner_id = data.get('winner_id')
+    if not winner_id:
+        return jsonify({'error': 'winner_id required'}), 400
+
+    db = get_db(current_app)
+
+    # Reset punish streak
+    db.execute('UPDATE watchers SET punish_streak = 0 WHERE id = ?', (winner_id,))
+    db.commit()
+
+    socketio.emit('data_changed', {})
+
+    final_winner = db.execute('SELECT id, name, points, punish_streak FROM watchers WHERE id = ?', (winner_id,)).fetchone()
+
+    return jsonify({
+        'ok': True,
         'winner': dict(final_winner) if final_winner else None,
     })
 

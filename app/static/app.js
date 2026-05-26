@@ -358,7 +358,11 @@ function renderWatchers() {
         });
         rightDiv.appendChild(delBtn);
         const ptsClass = w.points >= 0 ? 'pts-badge pos' : 'pts-badge neg';
-        header.innerHTML = `<span class="watcher-name">👤 ${escHtml(w.name)} <span class="${ptsClass}">${w.points}</span></span>`;
+        let streakHtml = '';
+        if (w.punish_streak > 0) {
+            streakHtml = `<span class="streak-badge">🔥x${w.punish_streak}</span>`;
+        }
+        header.innerHTML = `<span class="watcher-name">👤 ${escHtml(w.name)} <span class="${ptsClass}">${w.points}</span>${streakHtml}</span>`;
         header.appendChild(rightDiv);
         card.appendChild(header);
 
@@ -369,13 +373,13 @@ function renderWatchers() {
 
         // Add-title button — available while under 3 titles and remaining budget ≥ 1
         const personalBudget = Math.max(1, w.points);
-        const currentTitleTotal = w.titles.reduce((sum, t) => sum + (parseInt(t.points) || 0), 0);
+        const currentTitleTotal = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
         const remainingBudget = Math.max(0, personalBudget - currentTitleTotal);
-        const canAddMore = w.titles.length < 3 && remainingBudget >= 1;
+        const canAddMore = w.titles.length < 3 && remainingBudget >= 0.1;
         if (canAddMore) {
             const addBtn = document.createElement('button');
             addBtn.className = 'add-title-btn';
-            addBtn.textContent = `➕ Add Title (${w.titles.length}/3 · ${remainingBudget} pts left)`;
+            addBtn.textContent = `➕ Add Title (${w.titles.length}/3 · ${remainingBudget.toFixed(1)} pts left)`;
             addBtn.addEventListener('click', () => {
                 w.titles.push({ id: 'new_' + Date.now(), name: '', points: 1 });
                 renderWatchers();
@@ -410,8 +414,9 @@ function createTitleRow(watcher, title, index) {
     const pointsInput = document.createElement('input');
     pointsInput.type = 'number';
     pointsInput.className = 'title-points';
-    pointsInput.min = 1;
+    pointsInput.min = 0.1;
     pointsInput.max = 100;
+    pointsInput.step = '0.1';
     pointsInput.value = title.points || 1;
 
     const plusBtn = document.createElement('button');
@@ -431,18 +436,20 @@ function createTitleRow(watcher, title, index) {
         saveQueued = false;
         try {
             const name = nameInput.value.trim();
-            let pts = parseInt(pointsInput.value) || 1;
-            if (pts < 1) pts = 1;
+            let pts = parseFloat(pointsInput.value) || 1;
+            if (pts < 0.1) pts = 0.1;
             if (pts > 100) pts = 100;
 
             // Enforce point budget: total title points cannot exceed watcher's personal points
             const personalPts = Math.max(1, watcher.points);
             const otherTotal = watcher.titles
                 .filter(t => t.id !== title.id)
-                .reduce((sum, t) => sum + (parseInt(t.points) || 0), 0);
-            const maxForThis = Math.max(1, personalPts - otherTotal);
+                .reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
+            const maxForThis = Math.max(0, personalPts - otherTotal);
             if (pts > maxForThis) {
                 pts = maxForThis;
+                if (pts < 0.1) pts = 0.1;
+                pts = Math.round(pts * 100) / 100;
                 pointsInput.value = pts;
             }
             title.points = pts;
@@ -497,9 +504,9 @@ function createTitleRow(watcher, title, index) {
     });
 
     minusBtn.addEventListener('click', () => {
-        let val = parseInt(pointsInput.value) || 1;
-        if (val > 1) {
-            val--;
+        let val = parseFloat(pointsInput.value) || 1;
+        if (val > 0.1) {
+            val = Math.round((val - 0.1) * 100) / 100;
             pointsInput.value = val;
             title.points = val;
             clearTimeout(saveTimer);
@@ -509,9 +516,10 @@ function createTitleRow(watcher, title, index) {
     });
 
     pointsInput.addEventListener('input', () => {
-        let val = parseInt(pointsInput.value) || 1;
-        if (val < 1) val = 1;
+        let val = parseFloat(pointsInput.value) || 1;
+        if (val < 0.1) val = 0.1;
         if (val > 100) val = 100;
+        val = Math.round(val * 100) / 100;
         title.points = val;
         clearTimeout(saveTimer);
         saveNeedsRefresh = true;
@@ -519,9 +527,9 @@ function createTitleRow(watcher, title, index) {
     });
 
     plusBtn.addEventListener('click', () => {
-        let val = parseInt(pointsInput.value) || 1;
+        let val = parseFloat(pointsInput.value) || 1;
         if (val < 100) {
-            val++;
+            val = Math.round((val + 0.1) * 100) / 100;
             pointsInput.value = val;
             title.points = val;
             clearTimeout(saveTimer);
@@ -673,6 +681,25 @@ function getWinnerSegmentIndex() {
 
 function spinWheel() {
     if (isSpinning || segments.length < 1) return;
+
+    // Budget validation: every active watcher must have enough points for their titles
+    const active = getActiveWatchers();
+    const budgetViolators = [];
+    for (const w of active) {
+        const budget = Math.max(1, w.points);
+        const titleTotal = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
+        if (titleTotal > budget) {
+            budgetViolators.push(`${w.name} (${budget} pt budget, ${titleTotal} pts in titles)`);
+        }
+    }
+    if (budgetViolators.length > 0) {
+        const msg = '🚫 Budget violation!<br>' + budgetViolators.join('<br>');
+        returnMsg.innerHTML = msg;
+        returnMsg.style.color = '#ff6b6b';
+        returnMsg.classList.remove('hidden');
+        return;
+    }
+
     isSpinning = true;
     spinBtn.disabled = true;
     winnerDisplay.classList.add('hidden');
@@ -680,6 +707,8 @@ function spinWheel() {
     punishBtn.classList.add('faded');
     returnMsg.classList.add('hidden');
     lastWinnerInfo = null;
+    // Reset message color
+    returnMsg.style.color = '';
 
     const extraRotations = 4 + Math.random() * 4;
     const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
@@ -828,6 +857,11 @@ document.head.appendChild(styleSheet);
 
 function computeSegments() {
     segments = getActiveSegments();
+    // Fisher-Yates shuffle so the same watcher's titles aren't clumped together
+    for (let i = segments.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [segments[i], segments[j]] = [segments[j], segments[i]];
+    }
 }
 
 // ============================================================
@@ -977,13 +1011,22 @@ passBtn.addEventListener('click', async () => {
     passBtn.classList.add('faded');
     punishBtn.classList.add('faded');
     returnMsg.classList.add('hidden');
-    // Save judgement
+    // Save judgement & reset punish streak
     if (lastWinnerInfo && lastWinnerInfo.winnerId) {
         await fetch(`/api/winners/${lastWinnerInfo.winnerId}/judgement`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ judgement: 'pass' }),
         }).then(() => fetchWinners());
+        // Reset punish streak on the backend
+        const winnerData2 = allWatchers.find(w => w.name === lastWinnerInfo.seg.watcherName);
+        if (winnerData2) {
+            await fetch('/api/spin/pass', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ winner_id: winnerData2.id }),
+            });
+        }
         // Remove the winning title as cleanup
         if (lastWinnerInfo.seg && typeof lastWinnerInfo.seg.titleId === 'number') {
             await deleteTitle(lastWinnerInfo.seg.titleId);
@@ -1012,15 +1055,18 @@ punishBtn.addEventListener('click', async () => {
         const data = await res.json();
         if (!res.ok) { alert(data.error || 'Punish failed'); return; }
 
-        // Update points in allWatchers from response
+        // Update points and streak in allWatchers from response
         if (data.winner) {
             const w = allWatchers.find(x => x.id === data.winner.id);
-            if (w) w.points = data.winner.points;
+            if (w) {
+                w.points = data.winner.points;
+                w.punish_streak = data.winner.punish_streak;
+            }
         }
-        // Full refresh to get latest points
-        await fetchData(); // full refresh to get latest points
+        // Full refresh to get latest state
+        await fetchData();
         renderAll();
-        returnMsg.textContent = `👎 Punished! ${lastWinnerInfo.seg.watcherName} lost ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''}`;
+        returnMsg.textContent = `👎 Punished! ${lastWinnerInfo.seg.watcherName} lost ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)`;
         returnMsg.classList.remove('hidden');
 
         // Save punish judgement
