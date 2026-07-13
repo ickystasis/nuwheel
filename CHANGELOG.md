@@ -2,6 +2,13 @@
 
 ## [unreleased]
 
+## [1.5.1] - 2026-07-12
+
+- Wheel text: white fill with thick black outline
+- Wheel text: auto-scales font size to fit tile
+- Wheel text: centered between center button and wheel edge
+- Wheel text: word-wraps to 2 lines when too long
+
 ## [1.5.0] - 2026-07-12
 
 - Sound effects on spin/result

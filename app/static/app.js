@@ -887,22 +887,66 @@ function drawWheel(rotation) {
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(startAngle + arc / 2);
-        ctx.textAlign = 'right';
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#1a1a2e';
-        const fontSize = count > 12 ? 34 : count > 6 ? 40 : 46;
-        ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
 
         const text = segments[i].name;
-        const maxWidth = radius - 76;
-        let displayText = text;
-        if (ctx.measureText(text).width > maxWidth) {
-            while (ctx.measureText(displayText + '…').width > maxWidth && displayText.length > 1) {
-                displayText = displayText.slice(0, -1);
+        const pad = 20;
+        const innerEdge = CENTER_R + pad;
+        const outerEdge = radius - pad;
+        const textRadius = (innerEdge + outerEdge) / 2;
+        const maxTextWidth = (outerEdge - innerEdge) * 0.92;
+
+        function wrapText(fontSize) {
+            ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
+            if (ctx.measureText(text).width <= maxTextWidth) return [text];
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+            for (const word of words) {
+                const testLine = currentLine ? currentLine + ' ' + word : word;
+                if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
+                }
             }
-            displayText += '…';
+            if (currentLine) lines.push(currentLine);
+            if (lines.length > 2) {
+                while (lines.length > 2) {
+                    const lastLine = lines.pop();
+                    const prevLine = lines[lines.length - 1];
+                    const combined = prevLine + ' ' + (lastLine || '');
+                    if (ctx.measureText(combined).width <= maxTextWidth) {
+                        lines[lines.length - 1] = combined;
+                    } else {
+                        lines[lines.length - 1] = prevLine.slice(0, -2) + '…';
+                    }
+                }
+            }
+            return lines;
         }
-        ctx.fillText(displayText, radius - 46, 0);
+
+        let fontSize = 80;
+        let lines = wrapText(fontSize);
+        while (fontSize > 12 && lines.length > 2) {
+            fontSize -= 4;
+            lines = wrapText(fontSize);
+        }
+
+        const lineHeight = fontSize * 1.2;
+        const startY = -((lines.length - 1) * lineHeight) / 2;
+
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = Math.max(6, fontSize * 0.26);
+        ctx.lineJoin = 'round';
+        ctx.fillStyle = '#ffffff';
+        for (let li = 0; li < lines.length; li++) {
+            const y = startY + li * lineHeight;
+            ctx.strokeText(lines[li], textRadius, y);
+            ctx.fillText(lines[li], textRadius, y);
+        }
         ctx.restore();
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
