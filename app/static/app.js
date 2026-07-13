@@ -566,19 +566,18 @@ function renderWatchers() {
         header.className = 'watcher-header';
         const rightDiv = document.createElement('div');
 
-        if (!showVoting && !isSpinning && !lastWinnerInfo) {
-            const delBtn = document.createElement('button');
-            delBtn.className = 'watcher-del-btn';
-            delBtn.textContent = '✕';
-            delBtn.title = 'Remove from session';
-            delBtn.addEventListener('click', async () => {
-                activeIds.delete(w.id);
-                await saveSettings({ active_ids: [...activeIds] });
-                computeSegments();
-                renderAll();
-            });
-            rightDiv.appendChild(delBtn);
-        }
+        const delBtn = document.createElement('button');
+        delBtn.className = 'watcher-del-btn';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Remove from session';
+        delBtn.addEventListener('click', async () => {
+            activeIds.delete(w.id);
+            await saveSettings({ active_ids: [...activeIds] });
+            computeSegments();
+            renderAll();
+        });
+        rightDiv.appendChild(delBtn);
+        delBtn.classList.toggle('hidden', showVoting || isSpinning || lastWinnerInfo);
 
         const assignedWeight = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
         const pointsMatch = Math.abs(assignedWeight - w.points) < 0.0001;
@@ -1118,6 +1117,7 @@ function spinWheel() {
     lastWinnerInfo = null;
     // Reset message color
     returnMsg.style.color = '';
+    document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
     const extraRotations = 8 + Math.random() * 8;
     const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
@@ -2459,6 +2459,7 @@ socket.on('spin_completed', (data) => {
     const startTime = performance.now();
     const startRotation = wheelRotation;
     isSpinning = true;
+    document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
     function animate(now) {
         const elapsed = now - startTime;
