@@ -9,7 +9,77 @@ let segments = [];
 let isSpinning = false;
 let wheelRotation = 0;
 let animFrameId = null;
+let lastTickSegment = -1;
+let tickAudioCtx = null;
+function playTick() {
+    try {
+        if (!tickAudioCtx) tickAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = tickAudioCtx.createOscillator();
+        const gain = tickAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(tickAudioCtx.destination);
+        osc.frequency.value = 800;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.08, tickAudioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, tickAudioCtx.currentTime + 0.04);
+        osc.start(tickAudioCtx.currentTime);
+        osc.stop(tickAudioCtx.currentTime + 0.04);
+    } catch (e) { /* audio not supported */ }
+}
 let winners = [];
+
+let spinMusicAudio = null;
+let cheerAudio = null;
+
+let spinMusicFiles = [];
+let cheerFiles = [];
+
+async function fetchMediaLists() {
+    try {
+        const [music, cheers] = await Promise.all([
+            fetch('/api/media/music').then(r => r.json()),
+            fetch('/api/media/cheers').then(r => r.json()),
+        ]);
+        spinMusicFiles = music;
+        cheerFiles = cheers;
+    } catch (e) {}
+}
+
+function pickRandom(arr) {
+    if (arr.length === 0) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function playSpinMusic() {
+    try {
+        if (spinMusicAudio) { spinMusicAudio.pause(); spinMusicAudio = null; }
+        const file = pickRandom(spinMusicFiles);
+        if (!file) return;
+        spinMusicAudio = new Audio('music/' + file);
+        spinMusicAudio.loop = true;
+        spinMusicAudio.volume = 0.5;
+        spinMusicAudio.currentTime = 0;
+        spinMusicAudio.play();
+    } catch (e) {}
+}
+
+function stopSpinMusic() {
+    try {
+        if (spinMusicAudio) { spinMusicAudio.pause(); spinMusicAudio = null; }
+    } catch (e) {}
+}
+
+function playCheer() {
+    try {
+        if (cheerAudio) { cheerAudio.pause(); cheerAudio = null; }
+        const file = pickRandom(cheerFiles);
+        if (!file) return;
+        cheerAudio = new Audio('cheers/' + file);
+        cheerAudio.volume = 0.6;
+        cheerAudio.currentTime = 0;
+        cheerAudio.play();
+    } catch (e) {}
+}
 let watcherVotes = {};   // {watcherId: 'pass'|'punish'}
 let showVoting = false;  // whether vote toggles + verdict btn are active
 
@@ -41,10 +111,32 @@ const winnerDetails = document.getElementById('winnerDetails');
 const totalWeight = document.getElementById('totalWeight');
 const wheelInfo = document.getElementById('wheelInfo');
 const winnersBtn = document.getElementById('winnersBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const spinControlsBtn = document.getElementById('spinControlsBtn');
+const spinSettingsModal = document.getElementById('spinSettingsModal');
+const spinSettingsCloseBtn = document.getElementById('spinSettingsCloseBtn');
+const velocitySlider = document.getElementById('velocitySlider');
+const frictionGainSlider = document.getElementById('frictionGainSlider');
+const finalStretchSlider = document.getElementById('finalStretchSlider');
+const velocityValue = document.getElementById('velocityValue');
+const frictionGainValue = document.getElementById('frictionGainValue');
+const finalStretchValue = document.getElementById('finalStretchValue');
 const winnersModal = document.getElementById('winnersModal');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
 const winnersList = document.getElementById('winnersList');
 const clearWinnersBtn = document.getElementById('clearWinnersBtn');
+const statsBtn = document.getElementById('statsBtn');
+const statsModal = document.getElementById('statsModal');
+const statsCloseBtn = document.getElementById('statsCloseBtn');
+const statsBody = document.getElementById('statsBody');
+
+// Debt matrix refs
+const debtMatrixBtn = document.getElementById('debtMatrixBtn');
+const debtMatrixModal = document.getElementById('debtMatrixModal');
+const debtMatrixCloseBtn = document.getElementById('debtMatrixCloseBtn');
+const debtMatrixTable = document.getElementById('debtMatrixTable');
+const debtMatrixSummary = document.getElementById('debtMatrixSummary');
+let debtMatrixData = null; // {watchers, debts}
 
 // Participant modal refs
 const participantsModal = document.getElementById('participantsModal');
@@ -54,9 +146,18 @@ const newWatcherName = document.getElementById('newWatcherName');
 const newWatcherPoints = document.getElementById('newWatcherPoints');
 const addNewWatcherBtn = document.getElementById('addNewWatcherBtn');
 const startMovieNightBtn = document.getElementById('startMovieNightBtn');
+const bypassChecksInput = document.getElementById('bypassChecks');
+let bypassPointChecks = false;
+let spinSettings = {
+    duration: parseFloat(velocitySlider?.value) || 1.1,
+    decelSharpness: parseFloat(frictionGainSlider?.value) || 0.45,
+    finalCrawl: parseFloat(finalStretchSlider?.value) || 0.35,
+};
+let centerImage = null; // uploaded center button image
 
 // Judgement refs
 const verdictBtn = document.getElementById('verdictBtn');
+const abortBtn = document.getElementById('abortBtn');
 const returnMsg = document.getElementById('returnMsg');
 let lastWinnerInfo = null; // {seg, totalPts, winnerId}
 
@@ -65,7 +166,7 @@ const adminBtn = document.getElementById('adminBtn');
 const adminModal = document.getElementById('adminModal');
 const adminCloseBtn = document.getElementById('adminCloseBtn');
 const adminNewName = document.getElementById('adminNewName');
-const adminNewPoints = document.getElementById('adminNewPoints');
+const adminColorInput = document.getElementById('adminColorInput');
 const adminAddBtn = document.getElementById('adminAddBtn');
 const adminWatchersList = document.getElementById('adminWatchersList');
 
@@ -74,7 +175,14 @@ const retroVoteModal = document.getElementById('retroVoteModal');
 const retroVoteCloseBtn = document.getElementById('retroVoteCloseBtn');
 const retroVoteBody = document.getElementById('retroVoteBody');
 const retroVoteRecordBtn = document.getElementById('retroVoteRecordBtn');
+const importWinnersModal = document.getElementById('importWinnersModal');
+const importWinnersCloseBtn = document.getElementById('importWinnersCloseBtn');
+const importWinnersBtn = document.getElementById('importWinnersBtn');
+const importWinnersText = document.getElementById('importWinnersText');
+const importWinnersSubmitBtn = document.getElementById('importWinnersSubmitBtn');
+const importStatus = document.getElementById('importStatus');
 let retroVoteWinnerId = null; // winner id being retro-voted
+let retroVoteProposerName = null; // proposer for retro-vote tiebreaker
 let retroVotes = {}; // {watcherName: 'pass'|'punish'}
 
 // Password modal refs
@@ -155,15 +263,17 @@ const radius = canvas.width / 2 - 10;
 // ============================================================
 
 async function fetchData() {
-    const res = await fetch('/api/data');
+    const ids = [...activeIds].join(',');
+    const url = ids ? '/api/data?active_ids=' + encodeURIComponent(ids) : '/api/data';
+    const res = await fetch(url);
     allWatchers = await res.json();
 }
 
-async function addWatcher(name, points = 0) {
+async function addWatcher(name, color = '#4ECDC4') {
     const res = await fetch('/api/watchers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, points }),
+        body: JSON.stringify({ name, color }),
     });
     if (!res.ok) {
         const d = await res.json();
@@ -229,7 +339,16 @@ async function fetchWinners() {
     winners = await res.json();
 }
 
-async function saveWinner(titleName, watcherName, weight, totalWeight, participants) {
+function buildWheelMovies() {
+    const wheel = {};
+    for (const seg of segments) {
+        if (!wheel[seg.watcherName]) wheel[seg.watcherName] = [];
+        wheel[seg.watcherName].push({ name: seg.name, weight: seg.points });
+    }
+    return wheel;
+}
+
+async function saveWinner(titleName, watcherName, weight, totalWeight, participants, watcherBudget, watcherMovieCount, wheelMovies) {
     const res = await fetch('/api/winners', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,6 +356,9 @@ async function saveWinner(titleName, watcherName, weight, totalWeight, participa
             title_name: titleName, watcher_name: watcherName,
             weight, total_weight: totalWeight,
             participants: participants || '',
+            watcher_budget: watcherBudget || 0,
+            watcher_movie_count: watcherMovieCount || 0,
+            wheel_movies: wheelMovies || '{}',
         }),
     });
     if (!res.ok) return null;
@@ -246,6 +368,12 @@ async function saveWinner(titleName, watcherName, weight, totalWeight, participa
 async function clearAllWinners() {
     await fetch('/api/winners', { method: 'DELETE' });
     winners = [];
+}
+
+async function fetchStats() {
+    const res = await fetch('/api/stats');
+    if (!res.ok) throw new Error('Failed to fetch stats');
+    return res.json();
 }
 
 // ============================================================
@@ -262,7 +390,7 @@ function getActiveSegments() {
         if (!activeIds.has(w.id)) continue;
         for (const t of w.titles) {
             if (t.name.trim()) {
-                segs.push({ name: t.name, points: t.points, watcherName: w.name, titleId: t.id, displayOrder: t.display_order });
+                segs.push({ name: t.name, points: t.points, watcherName: w.name, titleId: t.id, displayOrder: t.display_order, color: w.color || '#4ECDC4' });
             }
         }
     }
@@ -293,11 +421,17 @@ function renderParticipantList() {
         cb.type = 'checkbox';
         cb.className = 'participant-check';
         cb.checked = activeIds.has(w.id);
-        cb.addEventListener('change', () => {
+        cb.addEventListener('change', async () => {
             if (cb.checked) activeIds.add(w.id);
             else activeIds.delete(w.id);
             saveActiveIds();
+            await fetchData();
+            renderAll();
         });
+
+        const swatch = document.createElement('span');
+        swatch.className = 'color-swatch';
+        swatch.style.background = w.color || '#4ECDC4';
 
         const name = document.createElement('span');
         name.className = 'participant-name';
@@ -308,6 +442,7 @@ function renderParticipantList() {
         pts.textContent = `${w.points} pts`;
 
         row.appendChild(cb);
+        row.appendChild(swatch);
         row.appendChild(name);
         row.appendChild(pts);
         allWatchersList.appendChild(row);
@@ -382,24 +517,10 @@ function renderWatchers() {
         card.className = 'watcher-card';
         card.dataset.watcherId = w.id;
 
-        // Header
         const header = document.createElement('div');
         header.className = 'watcher-header';
         const rightDiv = document.createElement('div');
-        if (w.titles.length > 0) {
-            const clearBtn = document.createElement('button');
-            clearBtn.className = 'clear-titles-btn';
-            clearBtn.textContent = '🗑️ Clear Titles';
-            clearBtn.addEventListener('click', async () => {
-                for (const t of w.titles) {
-                    if (typeof t.id === 'number') await deleteTitle(t.id);
-                }
-                w.titles = [];
-                computeSegments();
-                renderAll();
-            });
-            rightDiv.appendChild(clearBtn);
-        }
+
         const delBtn = document.createElement('button');
         delBtn.className = 'watcher-del-btn';
         delBtn.textContent = '✕';
@@ -411,53 +532,120 @@ function renderWatchers() {
             renderAll();
         });
         rightDiv.appendChild(delBtn);
-        const ptsClass = w.points >= 0 ? 'pts-badge pos' : 'pts-badge neg';
+
+        const assignedWeight = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
+        const pointsMatch = Math.abs(assignedWeight - w.points) < 0.0001;
+        const ptsClass = pointsMatch ? 'pts-badge pos' : 'pts-badge neg';
+        const displayPoints = w.points <= 0 ? 1 : w.points;
+        const ptsTooltipHtml = (() => {
+            const lines = [];
+            if (w.owed_to && w.owed_to.length > 0) {
+                for (const d of w.owed_to) {
+                    lines.push(`<span class="pos">+${d.amount}</span> from ${escHtml(d.name)}`);
+                    if (d.entries && d.entries.length > 0) {
+                        for (const e of d.entries) {
+                            const dt = e.won_at ? e.won_at.slice(0, 10) : '';
+                            lines.push(`  <span style="color:#888;font-size:0.7rem">↳ +${e.delta} <span style="color:#aaa">${escHtml(e.title)}</span> ${dt}</span>`);
+                        }
+                    }
+                }
+            }
+            if (w.owed_by && w.owed_by.length > 0) {
+                for (const d of w.owed_by) {
+                    lines.push(`<span class="neg">-${d.amount}</span> to ${escHtml(d.name)}`);
+                    if (d.entries && d.entries.length > 0) {
+                        for (const e of d.entries) {
+                            const dt = e.won_at ? e.won_at.slice(0, 10) : '';
+                            lines.push(`  <span style="color:#888;font-size:0.7rem">↳ -${e.delta} <span style="color:#aaa">${escHtml(e.title)}</span> ${dt}</span>`);
+                        }
+                    }
+                }
+            }
+            const owedToSum = (w.owed_to || []).reduce((s, d) => s + d.amount, 0);
+            const owedBySum = (w.owed_by || []).reduce((s, d) => s + d.amount, 0);
+            lines.push(`<span class="summary">6 + ${owedToSum} - ${owedBySum} = ${w.points}</span>`);
+            return lines.join('<br>');
+        })();
         let streakHtml = '';
         if (w.punish_streak > 0) {
-            streakHtml = `<span class="streak-badge">🔥x${w.punish_streak}</span>`;
+            const scale = 1 + Math.min(w.punish_streak, 5) * 0.33;
+            const tone = ['#f3f3a8', '#ffd068', '#ff8c4f', '#de4c39', '#a81c1c'][Math.min(w.punish_streak - 1, 4)];
+            streakHtml = `<span class="streak-badge" style="font-size:${scale.toFixed(2)}rem;background:${tone};color:#111">💀x${w.punish_streak}</span>`;
         }
-        header.innerHTML = `<span class="watcher-name">👤 ${escHtml(w.name)} <span class="${ptsClass}">${w.points}</span>${streakHtml}</span>`;
-        // Vote toggle when in voting mode
-        if (showVoting) {
-            const vote = watcherVotes[w.id] || 'pass';
-            const voteBtn = document.createElement('button');
-            voteBtn.className = `vote-toggle${vote === 'punish' ? ' vote-punish' : ''}`;
-            voteBtn.textContent = vote === 'pass' ? '👍 Pass' : '👎 Punish';
-            voteBtn.addEventListener('click', () => {
-                const newVote = watcherVotes[w.id] === 'pass' ? 'punish' : 'pass';
-                watcherVotes[w.id] = newVote;
-                voteBtn.className = `vote-toggle${newVote === 'punish' ? ' vote-punish' : ''}`;
-                voteBtn.textContent = newVote === 'pass' ? '👍 Pass' : '👎 Punish';
+        const color = (w.color || '#4ECDC4').replace(/['"]/g, '');
+        const ptsBadgeId = `pts-${w.id}`;
+        header.innerHTML = `<span class="watcher-name"><span class="victim-color-dot" style="background:${color}"></span> ${escHtml(w.name)} <span id="${ptsBadgeId}" class="${ptsClass}" style="cursor:help">${displayPoints}</span>${streakHtml}</span>`;
+        const ptsBadge = header.querySelector('#' + ptsBadgeId);
+        const tooltip = document.getElementById('ptsTooltip');
+        if (ptsBadge && tooltip) {
+            ptsBadge.addEventListener('mouseenter', () => {
+                tooltip.innerHTML = ptsTooltipHtml;
+                tooltip.classList.remove('hidden');
             });
+            ptsBadge.addEventListener('mousemove', (e) => {
+                tooltip.style.left = (e.clientX + 12) + 'px';
+                tooltip.style.top = (e.clientY - 10) + 'px';
+            });
+            ptsBadge.addEventListener('mouseleave', () => {
+                tooltip.classList.add('hidden');
+            });
+        }
+
+        if (showVoting) {
+            const isProposer = lastWinnerInfo && w.name === lastWinnerInfo.seg.watcherName;
+            const vote = watcherVotes[w.id] || (isProposer ? 'na' : 'pass');
+            const voteBtn = document.createElement('button');
+            if (isProposer) {
+                // Proposer: Punish / NA toggle
+                voteBtn.className = `vote-toggle${vote === 'punish' ? ' vote-punish' : ''}`;
+                voteBtn.textContent = vote === 'punish' ? '👎 Punish' : '🤷 NA';
+                voteBtn.addEventListener('click', () => {
+                    const newVote = watcherVotes[w.id] === 'punish' ? 'na' : 'punish';
+                    watcherVotes[w.id] = newVote;
+                    voteBtn.className = `vote-toggle${newVote === 'punish' ? ' vote-punish' : ''}`;
+                    voteBtn.textContent = newVote === 'punish' ? '👎 Punish' : '🤷 NA';
+                });
+            } else {
+                // Non-proposer: Pass / Punish toggle
+                voteBtn.className = `vote-toggle${vote === 'punish' ? ' vote-punish' : ''}`;
+                voteBtn.textContent = vote === 'pass' ? '👍 Pass' : '👎 Punish';
+                voteBtn.addEventListener('click', () => {
+                    const newVote = watcherVotes[w.id] === 'pass' ? 'punish' : 'pass';
+                    watcherVotes[w.id] = newVote;
+                    voteBtn.className = `vote-toggle${newVote === 'punish' ? ' vote-punish' : ''}`;
+                    voteBtn.textContent = newVote === 'pass' ? '👍 Pass' : '👎 Punish';
+                });
+            }
             header.appendChild(voteBtn);
         }
         header.appendChild(rightDiv);
         card.appendChild(header);
 
-        // Title rows
-        for (let i = 0; i < Math.min(w.titles.length, 3); i++) {
-            card.appendChild(createTitleRow(w, w.titles[i], i));
-        }
-
-        // Add-title button — available while under 3 titles and remaining budget ≥ 1
-        const personalBudget = Math.max(1, w.points);
-        const currentTitleTotal = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
-        const remainingBudget = Math.max(0, personalBudget - currentTitleTotal);
-        const canAddMore = w.titles.length < 3 && remainingBudget >= 0.1;
-        if (canAddMore) {
-            const addBtn = document.createElement('button');
-            addBtn.className = 'add-title-btn';
-            addBtn.textContent = `➕ Add Title (${w.titles.length}/3 · ${remainingBudget.toFixed(1)} pts left)`;
-            addBtn.addEventListener('click', () => {
-                w.titles.push({ id: 'new_' + Date.now(), name: '', points: 1 });
-                renderWatchers();
-                const inputs = card.querySelectorAll('.title-input');
-                const last = inputs[inputs.length - 1];
-                if (last) last.focus();
+        const titlesContainer = document.createElement('div');
+        titlesContainer.className = 'titles-container';
+        if (w.titles && w.titles.length > 0) {
+            w.titles.forEach((title, index) => {
+                titlesContainer.appendChild(createTitleRow(w, title, index));
             });
-            card.appendChild(addBtn);
+        } else {
+            const emptyTitles = document.createElement('div');
+            emptyTitles.className = 'balance-muted';
+            emptyTitles.textContent = 'No movies yet. Add one below to add a segment to the wheel.';
+            titlesContainer.appendChild(emptyTitles);
         }
 
+        const addTitleBtn = document.createElement('button');
+        addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
+        addTitleBtn.textContent = '➕ Add movie';
+        addTitleBtn.addEventListener('click', () => {
+            const newTitle = { id: null, name: '', points: 1 };
+            w.titles.push(newTitle);
+            titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
+            updateWheelInfo();
+        });
+
+        card.appendChild(titlesContainer);
+        card.appendChild(addTitleBtn);
         watchersContainer.appendChild(card);
     }
 
@@ -482,9 +670,8 @@ function createTitleRow(watcher, title, index) {
     const pointsInput = document.createElement('input');
     pointsInput.type = 'number';
     pointsInput.className = 'title-points';
-    pointsInput.min = 0.1;
-    pointsInput.max = 100;
-    pointsInput.step = '0.1';
+    pointsInput.min = 0;
+    pointsInput.step = 'any';
     pointsInput.value = title.points || 1;
 
     const plusBtn = document.createElement('button');
@@ -504,22 +691,11 @@ function createTitleRow(watcher, title, index) {
         saveQueued = false;
         try {
             const name = nameInput.value.trim();
-            let pts = parseFloat(pointsInput.value) || 1;
-            if (pts < 0.1) pts = 0.1;
-            if (pts > 100) pts = 100;
+            let pts = parseFloat(pointsInput.value);
+            if (!Number.isFinite(pts)) pts = 1;
+            if (pts < 0) pts = 0;
 
-            // Enforce point budget: total title points cannot exceed watcher's personal points
-            const personalPts = Math.max(1, watcher.points);
-            const otherTotal = watcher.titles
-                .filter(t => t.id !== title.id)
-                .reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
-            const maxForThis = Math.max(0, personalPts - otherTotal);
-            if (pts > maxForThis) {
-                pts = maxForThis;
-                if (pts < 0.1) pts = 0.1;
-                pts = Math.round(pts * 100) / 100;
-                pointsInput.value = pts;
-            }
+            // Free-form movie point assignment is allowed
             title.points = pts;
 
             const shouldRefresh = saveNeedsRefresh;
@@ -572,21 +748,20 @@ function createTitleRow(watcher, title, index) {
     });
 
     minusBtn.addEventListener('click', () => {
-        let val = parseFloat(pointsInput.value) || 1;
-        if (val > 0.1) {
-            val = Math.round((val - 0.1) * 100) / 100;
-            pointsInput.value = val;
-            title.points = val;
-            clearTimeout(saveTimer);
-            saveNeedsRefresh = true;
-            saveTimer = setTimeout(save, 200);
-        }
+        let val = parseFloat(pointsInput.value);
+        if (!Number.isFinite(val)) val = 1;
+        val = Math.round((val - 1) * 100) / 100;
+        if (val < 0) val = 0;
+        pointsInput.value = val;
+        title.points = val;
+        clearTimeout(saveTimer);
+        saveNeedsRefresh = true;
+        saveTimer = setTimeout(save, 200);
     });
 
     pointsInput.addEventListener('input', () => {
         let val = parseFloat(pointsInput.value) || 1;
         if (val < 0.1) val = 0.1;
-        if (val > 100) val = 100;
         val = Math.round(val * 100) / 100;
         title.points = val;
         clearTimeout(saveTimer);
@@ -595,15 +770,14 @@ function createTitleRow(watcher, title, index) {
     });
 
     plusBtn.addEventListener('click', () => {
-        let val = parseFloat(pointsInput.value) || 1;
-        if (val < 100) {
-            val = Math.round((val + 0.1) * 100) / 100;
-            pointsInput.value = val;
-            title.points = val;
-            clearTimeout(saveTimer);
-            saveNeedsRefresh = true;
-            saveTimer = setTimeout(save, 200);
-        }
+        let val = parseFloat(pointsInput.value);
+        if (!Number.isFinite(val)) val = 0;
+        val = Math.round((val + 1) * 100) / 100;
+        pointsInput.value = val;
+        title.points = val;
+        clearTimeout(saveTimer);
+        saveNeedsRefresh = true;
+        saveTimer = setTimeout(save, 200);
     });
 
     row.appendChild(nameInput);
@@ -672,7 +846,7 @@ function drawWheel(rotation) {
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, radius, startAngle, endAngle);
         ctx.closePath();
-        ctx.fillStyle = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
+        ctx.fillStyle = segments[i].color || SEGMENT_COLORS[i % SEGMENT_COLORS.length];
         ctx.fill();
 
         ctx.strokeStyle = '#1a1a2e';
@@ -699,25 +873,39 @@ function drawWheel(rotation) {
         }
         ctx.fillText(displayText, radius - 46, 0);
         ctx.restore();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
 
         currentAngle += arc;
     }
 
     // Center circle — clickable SPIN button
-    const centerR = 80;
+    const centerR = 440;
+    ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
-    ctx.fillStyle = '#1a1a2e';
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = '#2a2a3e';
     ctx.fill();
+    if (centerImage) {
+        ctx.drawImage(centerImage, cx - centerR, cy - centerR, centerR * 2, centerR * 2);
+    }
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
     ctx.strokeStyle = '#3a3a52';
     ctx.lineWidth = 8;
     ctx.stroke();
-    // SPIN label
-    ctx.fillStyle = '#ffd93d';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('SPIN', cx, cy);
+    if (!centerImage) {
+        ctx.fillStyle = '#ffd93d';
+        ctx.font = 'bold 44px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SPIN', cx, cy);
+    }
 }
 
 // ============================================================
@@ -758,25 +946,23 @@ function getWinnerSegmentIndex() {
 function spinWheel() {
     if (isSpinning || segments.length < 1) return;
 
-    // Budget validation: every active watcher must have enough points for their titles
+    // Budget validation (uses computed points with floor of 1)
     const active = getActiveWatchers();
-    const budgetViolators = [];
-    for (const w of active) {
-        const budget = Math.max(1, w.points);
+    const invalidWatchers = active.filter(w => {
         const titleTotal = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
-        if (titleTotal > budget) {
-            budgetViolators.push(`${w.name} (${budget} pt budget, ${titleTotal} pts in titles)`);
-        }
-    }
-    if (budgetViolators.length > 0) {
-        const msg = '🚫 Budget violation!<br>' + budgetViolators.join('<br>');
-        returnMsg.innerHTML = msg;
+        return Math.abs(titleTotal - w.points) > 0.0001;
+    });
+    if (!bypassPointChecks && invalidWatchers.length > 0) {
+        const msg = '🚫 Point assignment mismatch for: ' + invalidWatchers.map(w => w.name).join(', ');
+        returnMsg.textContent = msg;
         returnMsg.style.color = '#ff6b6b';
         returnMsg.classList.remove('hidden');
         return;
     }
 
     isSpinning = true;
+    lastTickSegment = -1;
+    playSpinMusic();
     winnerDisplay.classList.add('hidden');
     showVoting = false;
     watcherVotes = {};
@@ -792,18 +978,24 @@ function spinWheel() {
     const extraRotations = 8 + Math.random() * 8;
     const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    const duration = 10000 + Math.random() * 5000;
+    const duration = 3000 + spinSettings.duration * 9500;
     const startTime = performance.now();
     const startRotation = wheelRotation;
 
     function animate(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
-        // Variable-power ease-out: power ramps from 2 to 7 for extreme slow crawl at end
-        const eased = 1 - Math.pow(1 - t, 2 + 5 * t);
-        wheelRotation = startRotation + targetAngle * eased;
+        const baseEase = 1 - Math.pow(1 - t, 3 + spinSettings.decelSharpness * 2);
+        const finalWeight = Math.max(0, Math.min(1, (t - 0.65) / 0.35));
+        const finalEase = 1 - Math.pow(1 - finalWeight, 2 + (1 - spinSettings.finalCrawl) * 4);
+        const eased = Math.min(1, baseEase + finalEase * spinSettings.finalCrawl * 0.4);
+        wheelRotation = startRotation + (targetRotation - startRotation) * eased;
         drawWheel(wheelRotation);
-
+        const currentSeg = getWinnerSegmentIndex();
+        if (currentSeg !== lastTickSegment) {
+            lastTickSegment = currentSeg;
+            playTick();
+        }
         if (t < 1) {
             animFrameId = requestAnimationFrame(animate);
         } else {
@@ -817,6 +1009,8 @@ function spinWheel() {
 }
 
 function onSpinComplete() {
+    stopSpinMusic();
+    playCheer();
     const idx = getWinnerSegmentIndex();
     if (idx >= 0 && idx < segments.length) {
         const seg = segments[idx];
@@ -856,62 +1050,103 @@ async function acceptResults() {
     const participantIds = active.map(w => w.id);
 
     // Save winner to history
+    const winnerData = allWatchers.find(w => w.name === seg.watcherName);
+    const watcherBudget = winnerData ? Math.max(1, winnerData.points) : 0;
+    const watcherMovieCount = winnerData ? winnerData.titles.filter(t => t.name.trim()).length : 0;
+    const wheelMovies = buildWheelMovies();
     const saved = await saveWinner(
         seg.name, seg.watcherName, seg.points,
-        lastWinnerInfo.totalPts, participantNames
+        lastWinnerInfo.totalPts, participantNames,
+        watcherBudget, watcherMovieCount, wheelMovies
     );
     if (saved && saved.id) {
         lastWinnerInfo.winnerId = saved.id;
+        // Store incomplete state in localStorage for recovery
+        localStorage.setItem('incompleteWinner', JSON.stringify({
+            winnerRecordId: saved.id,
+            titleName: seg.name,
+            watcherName: seg.watcherName,
+            points: seg.points,
+            totalPts: lastWinnerInfo.totalPts,
+            participantIds: participantIds,
+            participantNames: participantNames,
+        }));
         fetchWinners();
     }
 
-    // Return stolen points
-    const winnerData = allWatchers.find(w => w.name === seg.watcherName);
-    if (winnerData && participantIds.length > 1) {
-        try {
-            const res = await fetch('/api/spin/process-win', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ winner_id: winnerData.id, participant_ids: participantIds }),
-            });
-            const data = await res.json();
-            if (data.returned && data.returned.length > 0) {
-                const names = data.returned.map(
-                    r => `${r.victim_name} (${r.amount} pt${r.amount > 1 ? 's' : ''})`
-                ).join(', ');
-                returnMsg.textContent = `🔄 Returned stolen points: ${names}`;
-                returnMsg.classList.remove('hidden');
-            }
-            if (data.winner) {
-                const w = allWatchers.find(x => x.id === data.winner.id);
-                if (w) w.points = data.winner.points;
-            }
-        } catch {}
-    }
-
-    // Remove the winning title
-    if (typeof seg.titleId === 'number') {
-        await deleteTitle(seg.titleId);
-    }
-
-    // Refresh display
     await fetchData();
     renderAll();
 
-    // Activate voting mode: show vote toggles + Render Verdict button
+    // Activate voting mode: show vote toggles + Render Verdict + Abort buttons
     showVoting = true;
     const activeWatchers = getActiveWatchers();
     watcherVotes = {};
     for (const w of activeWatchers) {
-        watcherVotes[w.id] = 'pass';
+        watcherVotes[w.id] = w.name === seg.watcherName ? 'na' : 'pass';
     }
     renderWatchers();
     verdictBtn.classList.remove('faded');
     verdictBtn.disabled = false;
+    abortBtn.classList.remove('faded');
+    abortBtn.disabled = false;
 
     // Hide Accept button
     spinBtn.classList.add('faded');
     spinBtn.disabled = true;
+}
+
+// ============================================================
+//  Abort Session
+// ============================================================
+
+async function abortSession() {
+    if (!lastWinnerInfo) return;
+    const winnerRecordId = lastWinnerInfo.winnerId;
+    if (!winnerRecordId) {
+        alert('No winner record to abort. Please accept results first.');
+        return;
+    }
+
+    verdictBtn.classList.add('faded');
+    verdictBtn.disabled = true;
+    abortBtn.classList.add('faded');
+    abortBtn.disabled = true;
+    returnMsg.classList.add('hidden');
+
+    try {
+        const res = await fetch('/api/spin/abort', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ winner_record_id: winnerRecordId }),
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            alert(data.error || 'Failed to abort session');
+            return;
+        }
+        await fetchWinners();
+        returnMsg.textContent = '🚫 Session aborted. Movie marked as cancelled.';
+        returnMsg.classList.remove('hidden');
+    } catch (e) {
+        alert('Abort failed: ' + e.message);
+        return;
+    }
+
+    setTimeout(() => {
+        showVoting = false;
+        watcherVotes = {};
+        renderAll();
+        verdictBtn.classList.add('faded');
+        verdictBtn.disabled = true;
+        abortBtn.classList.add('faded');
+        abortBtn.disabled = true;
+        spinBtn.classList.remove('faded');
+        spinBtn.disabled = false;
+        returnMsg.classList.add('hidden');
+        isSpinning = false;
+        lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
+    }, 2000);
 }
 
 // ============================================================
@@ -931,10 +1166,16 @@ async function renderVerdict() {
         return;
     }
 
-    // Tabulate votes
-    const punishCount = active.filter(w => watcherVotes[w.id] === 'punish').length;
-    const totalCount = active.length;
-    const isPunish = punishCount >= Math.ceil(totalCount / 2);
+    // Tabulate votes (exclude NA/abstain). Proposer's vote counts 1.1x to break ties.
+    const proposerName = seg.watcherName;
+    let punishScore = 0, passScore = 0;
+    for (const w of active) {
+        const v = watcherVotes[w.id];
+        const mult = (w.name === proposerName) ? 1.1 : 1;
+        if (v === 'punish') { punishScore += mult; }
+        else if (v === 'pass') { passScore += mult; }
+    }
+    const isPunish = (punishScore + passScore) > 0 && punishScore > passScore;
 
     verdictBtn.classList.add('faded');
     verdictBtn.disabled = true;
@@ -961,6 +1202,18 @@ async function renderVerdict() {
             fetchWinners();
         }
 
+        // Refund: clear debts owed to the winner (moved from acceptResults)
+        if (winnerData && active.length > 1) {
+            const refundIds = active.map(w => w.id);
+            try {
+                await fetch('/api/spin/process-win', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ winner_id: winnerData.id, participant_ids: refundIds, winner_record_id: lastWinnerInfo.winnerId }),
+                });
+            } catch { /* ignore */ }
+        }
+
         if (isPunish) {
             // Execute punish logic
             const active2 = getActiveWatchers();
@@ -968,21 +1221,14 @@ async function renderVerdict() {
             const res = await fetch('/api/spin/punish', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ winner_id: winnerData.id, participant_ids: participantIds }),
+                body: JSON.stringify({ winner_id: winnerData.id, participant_ids: participantIds, winner_record_id: lastWinnerInfo.winnerId }),
             });
             const data = await res.json();
             if (!res.ok) { alert(data.error || 'Punish failed'); return; }
 
-            if (data.winner) {
-                const w = allWatchers.find(x => x.id === data.winner.id);
-                if (w) {
-                    w.points = data.winner.points;
-                    w.punish_streak = data.winner.punish_streak;
-                }
-            }
             await fetchData();
             renderAll();
-            returnMsg.textContent = `👎 Punished! ${seg.watcherName} lost ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)`;
+            returnMsg.textContent = `👎 Punished! ${seg.watcherName} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)`;
         } else {
             // Execute pass logic
             await fetch('/api/spin/pass', {
@@ -1007,9 +1253,12 @@ async function renderVerdict() {
         renderWatchers();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
+        abortBtn.classList.add('faded');
+        abortBtn.disabled = true;
         returnMsg.classList.add('hidden');
         isSpinning = false;
         lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
     }, 2500);
 }
 
@@ -1079,11 +1328,51 @@ function renderAll() {
     computeSegments();
     renderWatchers();
     drawWheel(wheelRotation);
+    if (shuffleBtn) {
+        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0);
+    }
+}
+
+async function shuffleWheel() {
+    if (isSpinning || segments.length === 0) return;
+    // Shuffle locally — only affects wheel canvas, not panel title order
+    for (let i = segments.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [segments[i], segments[j]] = [segments[j], segments[i]];
+    }
+    drawWheel(wheelRotation);
 }
 
 // ============================================================
 //  Previous Winners Modal
 // ============================================================
+
+function makeEditableField(value, onChange) {
+    const span = document.createElement('span');
+    span.textContent = value;
+    span.className = 'editable-field';
+    span.addEventListener('click', () => {
+        if (span.querySelector('input')) return;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'editable-input';
+        inp.value = span.textContent;
+        span.textContent = '';
+        span.appendChild(inp);
+        inp.focus();
+        inp.select();
+        inp.addEventListener('blur', () => {
+            const newVal = inp.value.trim();
+            span.textContent = newVal || value;
+            onChange(newVal || value);
+        });
+        inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') inp.blur();
+            if (e.key === 'Escape') { span.textContent = value; }
+        });
+    });
+    return span;
+}
 
 function renderWinnersList() {
     winnersList.innerHTML = '';
@@ -1092,72 +1381,210 @@ function renderWinnersList() {
         return;
     }
     for (const w of winners) {
+        const budget = parseInt(w.watcher_budget) || 0;
+        const movieCount = parseInt(w.watcher_movie_count) || 0;
+        const isGold = w.weight == 1 && (budget === 0 || budget === 1) && (movieCount === 0 || movieCount === 1);
         const entry = document.createElement('div');
-        entry.className = 'winner-entry';
+        entry.className = `winner-entry${isGold ? ' winner-entry-gold' : ''}${w.status === 'disabled' ? ' winner-entry-disabled' : ''}${w.judgement === 'aborted' ? ' winner-entry-aborted' : ''}`;
 
         const left = document.createElement('div');
-        const t = document.createElement('div');
-        t.className = 'winner-entry-title';
+        left.style.cssText = 'display:flex;flex-direction:column;gap:0.25rem;flex:1;min-width:0;';
 
-        // Show judgement emoji
-        let titleText = '';
-        if (w.judgement === 'pass') titleText = '👍 ';
-        else if (w.judgement === 'punish') titleText = '👎 ';
-        titleText += `🏆 ${w.title_name}`;
-        t.textContent = titleText;
+        // Top row: clickable judgement emoji + title
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText = 'display:flex;align-items:center;gap:0.4rem;';
 
-        const m = document.createElement('div');
-        m.className = 'winner-entry-meta';
-        let meta = `Weight: ${w.weight}/${w.total_weight} — by ${w.watcher_name}`;
-        if (w.participants) {
-            meta += `  •  🎬 ${w.participants}`;
+        const judgeBtn = document.createElement('span');
+        judgeBtn.style.cssText = 'font-size:1.1rem;';
+        if (w.judgement === 'aborted') {
+            judgeBtn.textContent = '🚫';
+            judgeBtn.title = 'Aborted';
+        } else if (w.judgement === 'punish') {
+            judgeBtn.textContent = '👎';
+            judgeBtn.title = 'Punish — click to toggle';
+            judgeBtn.style.cursor = 'pointer';
+            judgeBtn.addEventListener('click', async () => {
+                const next = 'pass';
+                try {
+                    await fetch(`/api/winners/${w.id}/judgement`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ judgement: next }),
+                    });
+                    w.judgement = next;
+                    renderWinnersList();
+                } catch (e) { alert(e.message); }
+            });
+        } else if (w.judgement === 'pass') {
+            judgeBtn.textContent = '👍';
+            judgeBtn.title = 'Pass — click to toggle';
+            judgeBtn.style.cursor = 'pointer';
+            judgeBtn.addEventListener('click', async () => {
+                const next = 'punish';
+                try {
+                    await fetch(`/api/winners/${w.id}/judgement`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ judgement: next }),
+                    });
+                    w.judgement = next;
+                    renderWinnersList();
+                } catch (e) { alert(e.message); }
+            });
+        } else {
+            judgeBtn.textContent = '❓';
+            judgeBtn.title = 'No verdict — click to set';
+            judgeBtn.style.cursor = 'pointer';
+            judgeBtn.addEventListener('click', async () => {
+                const next = 'punish';
+                try {
+                    await fetch(`/api/winners/${w.id}/judgement`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ judgement: next }),
+                    });
+                    w.judgement = next;
+                    renderWinnersList();
+                } catch (e) { alert(e.message); }
+            });
         }
-        m.textContent = meta;
-        left.appendChild(t);
-        left.appendChild(m);
+        titleRow.appendChild(judgeBtn);
 
-        // Show per-watcher votes if available
-        if (w.votes && w.votes !== '{}') {
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'winner-entry-title';
+        titleSpan.appendChild(makeEditableField(w.title_name, async (val) => {
             try {
-                const votesData = JSON.parse(w.votes);
-                const voteList = Object.entries(votesData).map(([key, vote]) => {
-                    // Key can be a watcher ID (numeric) or watcher name (retro voting)
-                    const name = /^\d+$/.test(key)
-                        ? (allWatchers.find(x => x.id == key)?.name || `User #${key}`)
-                        : key;
-                    return `${vote === 'pass' ? '👍' : '👎'} ${name}`;
-                }).join(' · ');
-                if (voteList) {
-                    const v = document.createElement('div');
-                    v.className = 'winner-entry-votes';
-                    v.textContent = `Votes: ${voteList}`;
-                    left.appendChild(v);
-                }
-            } catch (e) { /* skip corrupt votes data */ }
+                await fetch(`/api/winners/${w.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title_name: val }),
+                });
+                w.title_name = val;
+            } catch (e) { alert(e.message); }
+        }));
+        titleRow.appendChild(titleSpan);
+        left.appendChild(titleRow);
+
+        // Meta line: weight/max + proposer + date + streak
+        const metaRow = document.createElement('div');
+        metaRow.className = 'winner-entry-meta';
+        metaRow.style.cssText = 'display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;';
+
+        const maxW = parseFloat(w.total_weight) || 0;
+        const weightStr = maxW > 0 ? `${w.weight}/${maxW}` : `${w.weight}/NA`;
+        const weightSpan = document.createElement('span');
+        weightSpan.textContent = `W:${weightStr}`;
+        metaRow.appendChild(weightSpan);
+
+        metaRow.appendChild(document.createTextNode(' by '));
+        const propName = w.watcher_name;
+        const propSpan = document.createElement('span');
+        propSpan.textContent = propName;
+        propSpan.style.cssText = 'cursor:help;border-bottom:1px dotted rgba(255,255,255,0.25);';
+        metaRow.appendChild(propSpan);
+
+        let d;
+        if (w.won_at && w.won_at.includes(' ')) {
+            // SQLite datetime format YYYY-MM-DD HH:MM:SS (UTC)
+            d = new Date(w.won_at.replace(' ', 'T') + 'Z');
+        } else if (w.won_at && w.won_at.includes('-')) {
+            // Date-only from import: parse as local to avoid timezone shift
+            const parts = w.won_at.split('-');
+            d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        }
+        const dateSpan = document.createElement('span');
+        dateSpan.className = 'winner-entry-when';
+        dateSpan.textContent = d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (w.won_at || '');
+        metaRow.appendChild(dateSpan);
+
+        if (w.punish_streak > 0) {
+            const streakSpan = document.createElement('span');
+            streakSpan.className = 'streak-badge-sm';
+            streakSpan.textContent = `🔥x${w.punish_streak}`;
+            metaRow.appendChild(streakSpan);
         }
 
-        // Right side: timestamp + retroactive voting
+        left.appendChild(metaRow);
+
+        // Parse wheel_movies for tooltips
+        let spinMovies = {};
+        try { spinMovies = JSON.parse(w.wheel_movies || '{}'); } catch (e) {}
+
+        // Replace proposer tooltip with per-spin movies
+        const propMovieList = spinMovies[propName] || [];
+        if (propMovieList.length > 0) {
+            const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`);
+            propSpan.title = `This spin's movies:\n${tooltipLines.join('\n')}`;
+        }
+
+        // Per-watcher votes row — static text with hover
+        const voteChips = document.createElement('div');
+        voteChips.style.cssText = 'display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap;font-size:0.8rem;';
+        let votesData = {};
+        if (w.votes && w.votes !== '{}') {
+            try { votesData = JSON.parse(w.votes); } catch (e) {}
+        }
+        // For aborted entries, show attendance from participants field
+        if (w.judgement === 'aborted') {
+            const names = (w.participants || '').split(',').map(s => s.trim()).filter(Boolean);
+            if (names.length > 0) {
+                const attendLabel = document.createElement('span');
+                attendLabel.style.cssText = 'font-size:0.75rem;color:#888;';
+                attendLabel.textContent = `👥 Attended: ${names.join(', ')}`;
+                voteChips.appendChild(attendLabel);
+            } else {
+                const noAttend = document.createElement('span');
+                noAttend.style.cssText = 'font-size:0.75rem;color:#666;font-style:italic;';
+                noAttend.textContent = 'No attendance data';
+                voteChips.appendChild(noAttend);
+            }
+        } else {
+            for (const [key, vote] of Object.entries(votesData)) {
+                const name = /^\d+$/.test(key)
+                    ? (allWatchers.find(x => x.id == key)?.name || `User #${key}`)
+                    : key;
+                const chip = document.createElement('span');
+                if (vote === 'punish') {
+                    chip.className = 'vote-chip vote-chip-punish';
+                    chip.textContent = `👎 ${name}`;
+                } else if (vote === 'na') {
+                    chip.className = 'vote-chip vote-chip-na';
+                    chip.textContent = `🤷 ${name}`;
+                } else {
+                    chip.className = 'vote-chip vote-chip-pass';
+                    chip.textContent = `👍 ${name}`;
+                }
+                chip.style.cssText = 'cursor:default;';
+                // Per-spin movie tooltip
+                const voterMovieList = spinMovies[name] || [];
+                if (voterMovieList.length > 0) {
+                    chip.title = `Movies in this spin:\n${voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`).join('\n')}`;
+                }
+                voteChips.appendChild(chip);
+            }
+        }
+        left.appendChild(voteChips);
+
+        // Right column: status toggle
         const rightCol = document.createElement('div');
         rightCol.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:0.3rem;';
 
-        const when = document.createElement('div');
-        when.className = 'winner-entry-when';
-        const d = new Date(w.won_at + 'Z');
-        when.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        rightCol.appendChild(when);
-
-        // Retro Vote button (only if no per-watcher votes recorded yet)
-        if (!w.votes || w.votes === '{}') {
-            const retroBtn = document.createElement('button');
-            retroBtn.textContent = '🗳️ Retro Vote';
-            retroBtn.title = 'Cast per-watcher votes for this entry';
-            retroBtn.className = 'retro-vote-btn';
-            retroBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openRetroVoteModal(w);
-            });
-            rightCol.appendChild(retroBtn);
-        }
+        const statusBtn = document.createElement('button');
+        statusBtn.className = 'status-toggle-btn';
+        statusBtn.textContent = w.status === 'disabled' ? 'Disabled' : 'Active';
+        statusBtn.addEventListener('click', async () => {
+            const next = w.status === 'disabled' ? 'active' : 'disabled';
+            try {
+                await fetch(`/api/winners/${w.id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: next }),
+                });
+                w.status = next;
+                renderWinnersList();
+            } catch (e) { alert(e.message); }
+        });
+        rightCol.appendChild(statusBtn);
 
         entry.appendChild(left);
         entry.appendChild(rightCol);
@@ -1174,12 +1601,224 @@ function closeWinnersModal() {
     winnersModal.classList.add('hidden');
 }
 
+async function openStatsModal() {
+    statsModal.classList.remove('hidden');
+    statsBody.innerHTML = '<p class="empty-msg">Loading stats…</p>';
+    try {
+        const data = await fetchStats();
+        if (!data.watchers || data.watchers.length === 0) {
+            statsBody.innerHTML = '<p class="empty-msg">No active sessions yet.</p>';
+            return;
+        }
+
+        const rows = data.watchers.map(item => `
+            <tr>
+                <td>${escHtml(item.name)}</td>
+                <td>${item.attendance_count}</td>
+                <td>${item.pick_count}</td>
+                <td>${item.punish_count}</td>
+                <td><span class="stats-pill">${item.attendance_pct.toFixed(1)}%</span></td>
+            </tr>
+        `).join('');
+
+        statsBody.innerHTML = `
+            <div class="winner-entry-meta" style="margin-bottom:0.75rem">Active sessions: ${data.total_active_sessions}</div>
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Victim</th>
+                        <th>Attendance</th>
+                        <th>Picks</th>
+                        <th>Punishes</th>
+                        <th>Share</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    } catch (e) {
+        statsBody.innerHTML = '<p class="empty-msg">Could not load stats right now.</p>';
+    }
+}
+
+function closeStatsModal() {
+    statsModal.classList.add('hidden');
+}
+
+// ============================================================
+//  Debt Matrix
+// ============================================================
+
+async function fetchDebtMatrix() {
+    const res = await fetch('/api/debts');
+    if (!res.ok) throw new Error('Failed to fetch debt matrix');
+    return await res.json();
+}
+
+function escAttr(s) {
+    return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderDebtMatrix(data) {
+    debtMatrixData = data;
+    const { watchers, debts } = data;
+    const count = watchers.length;
+    if (count === 0) {
+        debtMatrixTable.innerHTML = '';
+        debtMatrixSummary.textContent = 'No watchers yet.';
+        return;
+    }
+
+    // Build lookup: (debtor_id, creditor_id) -> amount
+    const debtMap = {};
+    for (const d of debts) {
+        debtMap[`${d.debtor_id},${d.creditor_id}`] = d.amount;
+    }
+    function getDebt(dId, cId) {
+        if (dId === cId) return 0;
+        return debtMap[`${dId},${cId}`] || 0;
+    }
+
+    // Calculate effective points for each watcher: base 6 + owed to - owed by (all watchers)
+    const wheelPoints = {};
+    for (const w of watchers) {
+        let owedTo = 0;
+        let owedBy = 0;
+        for (const other of watchers) {
+            if (other.id === w.id) continue;
+            owedTo += getDebt(other.id, w.id);
+            owedBy += getDebt(w.id, other.id);
+        }
+        wheelPoints[w.id] = 6 + owedTo - owedBy;
+    }
+
+    // Build table
+    const thead = debtMatrixTable.querySelector('thead');
+    const tbody = debtMatrixTable.querySelector('tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+
+    // Header row
+    let headerHtml = '<tr><th class="row-header">Owed ↓ / Owes →</th>';
+    for (const w of watchers) {
+        headerHtml += `<th>${escHtml(w.name)}</th>`;
+    }
+    headerHtml += '<th style="background:#1a1a2e;color:#6bcb77">Effective Pts</th></tr>';
+    thead.innerHTML = headerHtml;
+
+    // Data rows
+    for (const row of watchers) {
+        let rowHtml = `<tr><td>${escHtml(row.name)}</td>`;
+        for (const col of watchers) {
+            let cls, val;
+            if (row.id === col.id) {
+                cls = 'cell-diagonal';
+                val = '';
+            } else {
+                val = getDebt(col.id, row.id);
+                cls = val > 0 ? 'cell-positive cell-editable' : 'cell-zero cell-editable';
+            }
+            rowHtml += `<td class="${cls}" data-d="${col.id}" data-c="${row.id}" title="${escHtml(col.name)} owes ${escHtml(row.name)}">${val}</td>`;
+        }
+        const pts = wheelPoints[row.id];
+        const ptsColor = pts >= 1 ? '#6bcb77' : '#ff6b6b';
+        rowHtml += `<td style="font-weight:600;color:${ptsColor};background:#1a1a2e">${pts}</td>`;
+        rowHtml += '</tr>';
+        tbody.innerHTML += rowHtml;
+    }
+
+    // Make all cells uniform width = widest cell (for a true grid look)
+    requestAnimationFrame(() => {
+        const allCells = debtMatrixTable.querySelectorAll('th, td');
+        let maxW = 0;
+        allCells.forEach(cell => {
+            const w = cell.scrollWidth;
+            if (w > maxW) maxW = w;
+        });
+        maxW += 10; // 1-char breathing room at 0.7rem
+        allCells.forEach(cell => {
+            cell.style.width = maxW + 'px';
+            cell.style.minWidth = maxW + 'px';
+            cell.style.maxWidth = maxW + 'px';
+        });
+    });
+
+    // Make cells editable on click (admin-only check happens in save)
+    tbody.querySelectorAll('td.cell-editable').forEach(td => {
+        td.addEventListener('click', () => {
+            if (td.querySelector('input')) return; // already editing
+            const orig = td.textContent.trim();
+            const inp = document.createElement('input');
+            inp.type = 'number';
+            inp.step = '0.1';
+            inp.value = orig;
+            inp.dataset.orig = orig;
+            td.textContent = '';
+            td.appendChild(inp);
+            inp.focus();
+            inp.select();
+            inp.addEventListener('blur', () => saveDebtCell(td, inp));
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { inp.blur(); }
+                if (e.key === 'Escape') { td.textContent = orig; }
+            });
+        });
+    });
+}
+
+async function saveDebtCell(td, inp) {
+    const val = Math.round(parseFloat(inp.value));
+    if (!Number.isFinite(val)) {
+        td.textContent = inp.dataset.orig;
+        return;
+    }
+    const debtor_id = parseInt(td.dataset.d);
+    const creditor_id = parseInt(td.dataset.c);
+    try {
+        // Admin check
+        const ok = await verifyAdminPassword();
+        if (!ok) {
+            td.textContent = inp.dataset.orig;
+            return;
+        }
+        const res = await fetch('/api/debts', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ debtor_id, creditor_id, amount: val }),
+        });
+        if (!res.ok) throw new Error('Failed to update');
+        td.textContent = val;
+        td.className = val === 0 ? 'cell-zero cell-editable' : 'cell-positive cell-editable';
+        // Re-fetch and re-render to keep summary in sync
+        const fresh = await fetchDebtMatrix();
+        renderDebtMatrix(fresh);
+    } catch (e) {
+        td.textContent = inp.dataset.orig;
+        alert(e.message);
+    }
+}
+
+async function openDebtMatrix() {
+    try {
+        const data = await fetchDebtMatrix();
+        renderDebtMatrix(data);
+        debtMatrixModal.classList.remove('hidden');
+    } catch (e) {
+        alert('Failed to load debt matrix: ' + e.message);
+    }
+}
+
+function closeDebtMatrix() {
+    debtMatrixModal.classList.add('hidden');
+}
+
 // ============================================================
 //  Retro Vote Modal
 // ============================================================
 
 function openRetroVoteModal(winner) {
     retroVoteWinnerId = winner.id;
+    retroVoteProposerName = winner.watcher_name;
     retroVotes = {};
     retroVoteBody.innerHTML = '';
 
@@ -1227,10 +1866,14 @@ async function recordRetroVote() {
     const names = Object.keys(retroVotes);
     if (names.length === 0 || !retroVoteWinnerId) return;
 
-    // Tabulate
-    const punishCount = names.filter(n => retroVotes[n] === 'punish').length;
-    const totalCount = names.length;
-    const isPunish = punishCount >= Math.ceil(totalCount / 2);
+    // Tabulate (proposer's vote counts 1.1x to break ties)
+    let punishScore = 0, passScore = 0;
+    for (const name of names) {
+        const mult = (name === retroVoteProposerName) ? 1.1 : 1;
+        if (retroVotes[name] === 'punish') { punishScore += mult; }
+        else { passScore += mult; }
+    }
+    const isPunish = (punishScore + passScore) > 0 && punishScore > passScore;
 
     retroVoteRecordBtn.disabled = true;
     retroVoteRecordBtn.textContent = '⏳ Saving...';
@@ -1256,8 +1899,25 @@ async function recordRetroVote() {
     retroVoteRecordBtn.disabled = false;
     retroVoteRecordBtn.textContent = '📝 Record Votes';
     retroVoteWinnerId = null;
+    retroVoteProposerName = null;
     retroVotes = {};
 }
+
+// Image upload for center button
+document.getElementById('centerImageInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        img.onload = () => {
+            centerImage = img;
+            drawWheel(wheelRotation);
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+});
 
 // ============================================================
 //  Events — Participants Modal
@@ -1268,12 +1928,37 @@ participantsCloseBtn.addEventListener('click', closeParticipantsModal);
 participantsModal.addEventListener('click', (e) => {
     if (e.target === participantsModal) closeParticipantsModal();
 });
-
-// Start movie night
 startMovieNightBtn.addEventListener('click', () => {
+    saveActiveIds();
     closeParticipantsModal();
     renderAll();
 });
+shuffleBtn.addEventListener('click', shuffleWheel);
+spinControlsBtn.addEventListener('click', () => {
+    spinSettingsModal.classList.remove('hidden');
+});
+spinSettingsCloseBtn.addEventListener('click', () => {
+    spinSettingsModal.classList.add('hidden');
+});
+spinSettingsModal.addEventListener('click', (e) => {
+    if (e.target === spinSettingsModal) spinSettingsModal.classList.add('hidden');
+});
+velocitySlider.addEventListener('input', () => {
+    spinSettings.duration = parseFloat(velocitySlider.value);
+    velocityValue.textContent = spinSettings.duration.toFixed(2);
+});
+frictionGainSlider.addEventListener('input', () => {
+    spinSettings.decelSharpness = parseFloat(frictionGainSlider.value);
+    frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
+});
+finalStretchSlider.addEventListener('input', () => {
+    spinSettings.finalCrawl = parseFloat(finalStretchSlider.value);
+    finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+});
+bypassChecksInput.addEventListener('change', () => {
+    bypassPointChecks = bypassChecksInput.checked;
+});
+renderAll();
 
 // Escape key for modals
 document.addEventListener('keydown', (e) => {
@@ -1281,6 +1966,7 @@ document.addEventListener('keydown', (e) => {
         if (!participantsModal.classList.contains('hidden')) closeParticipantsModal();
         if (!winnersModal.classList.contains('hidden')) closeWinnersModal();
         if (!retroVoteModal.classList.contains('hidden')) retroVoteModal.classList.add('hidden');
+        if (!debtMatrixModal.classList.contains('hidden')) closeDebtMatrix();
     }
 });
 
@@ -1301,6 +1987,7 @@ spinBtn.addEventListener('click', acceptResults);
 // ── Events — Verdict ──
 
 verdictBtn.addEventListener('click', renderVerdict);
+abortBtn.addEventListener('click', abortSession);
 
 // ── Events — Admin ──
 
@@ -1318,25 +2005,27 @@ function renderAdminWatchers() {
         nameSpan.className = 'participant-name';
         nameSpan.textContent = w.name;
 
-        const ptsInput = document.createElement('input');
-        ptsInput.type = 'number';
-        ptsInput.className = 'points-input';
-        ptsInput.value = w.points;
-        ptsInput.min = '-9999';
-        ptsInput.max = '9999';
+        const ptsDisplay = document.createElement('span');
+        ptsDisplay.className = 'pts-badge pos';
+        ptsDisplay.textContent = `${w.points} pts`;
+        ptsDisplay.title = 'Base 6 + debt matrix';
 
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'btn btn-small btn-add';
-        saveBtn.textContent = '💾';
-        saveBtn.title = 'Save points';
-        saveBtn.addEventListener('click', async () => {
-            const newPts = parseInt(ptsInput.value) || 0;
-            if (newPts < -9999 || newPts > 9999) {
-                alert('Points must be between -9999 and 9999');
-                return;
-            }
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.className = 'color-input';
+        colorInput.value = w.color || '#4ECDC4';
+
+        const saveColorBtn = document.createElement('button');
+        saveColorBtn.className = 'btn btn-small btn-add';
+        saveColorBtn.textContent = '💾';
+        saveColorBtn.title = 'Save color';
+        saveColorBtn.addEventListener('click', async () => {
             try {
-                await adjustWatcherPoints(w.id, newPts - w.points);
+                await fetch(`/api/watchers/${w.id}/color`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ color: colorInput.value }),
+                });
                 await fetchData();
                 renderAdminWatchers();
                 renderAll();
@@ -1376,8 +2065,9 @@ function renderAdminWatchers() {
         });
 
         row.appendChild(nameSpan);
-        row.appendChild(ptsInput);
-        row.appendChild(saveBtn);
+        row.appendChild(ptsDisplay);
+        row.appendChild(colorInput);
+        row.appendChild(saveColorBtn);
         row.appendChild(delBtn);
         adminWatchersList.appendChild(row);
     }
@@ -1399,13 +2089,12 @@ adminModal.addEventListener('click', (e) => {
 adminAddBtn.addEventListener('click', async () => {
     const name = adminNewName.value.trim();
     if (!name) { alert('Enter a watcher name'); return; }
-    const pts = parseInt(adminNewPoints.value) || 0;
     try {
-        const w = await addWatcher(name, pts);
+        const w = await addWatcher(name, adminColorInput.value);
         activeIds.add(w.id);
         saveActiveIds();
         adminNewName.value = '';
-        adminNewPoints.value = '0';
+        adminColorInput.value = '#4ECDC4';
         renderAdminWatchers();
         renderAll();
     } catch (e) { alert(e.message); }
@@ -1424,12 +2113,77 @@ modalCloseBtn.addEventListener('click', closeWinnersModal);
 winnersModal.addEventListener('click', (e) => {
     if (e.target === winnersModal) closeWinnersModal();
 });
+statsBtn.addEventListener('click', openStatsModal);
+statsCloseBtn.addEventListener('click', closeStatsModal);
+statsModal.addEventListener('click', (e) => {
+    if (e.target === statsModal) closeStatsModal();
+});
+debtMatrixBtn.addEventListener('click', openDebtMatrix);
+debtMatrixCloseBtn.addEventListener('click', closeDebtMatrix);
+debtMatrixModal.addEventListener('click', (e) => {
+    if (e.target === debtMatrixModal) closeDebtMatrix();
+});
 
 clearWinnersBtn.addEventListener('click', async () => {
     if (winners.length === 0) return;
     if (!confirm('⚠️ This will permanently delete ALL winner history. Are you sure?')) return;
     await clearAllWinners();
     renderWinnersList();
+});
+
+importWinnersBtn.addEventListener('click', () => {
+    importWinnersText.value = '';
+    importWinnersText.disabled = false;
+    importStatus.style.display = 'none';
+    importStatus.textContent = '';
+    importWinnersModal.classList.remove('hidden');
+    setTimeout(() => importWinnersText.focus(), 200);
+});
+
+importWinnersCloseBtn.addEventListener('click', () => importWinnersModal.classList.add('hidden'));
+importWinnersModal.addEventListener('click', (e) => {
+    if (e.target === importWinnersModal) importWinnersModal.classList.add('hidden');
+});
+
+importWinnersSubmitBtn.addEventListener('click', async () => {
+    const csvText = importWinnersText.value.trim();
+    if (!csvText) return;
+    importWinnersSubmitBtn.disabled = true;
+    importWinnersSubmitBtn.textContent = 'Importing...';
+    importStatus.style.display = 'none';
+    try {
+        const res = await fetch('/api/winners/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csv: csvText }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Import failed');
+        let msg = `✅ Imported ${data.succeeded} winner${data.succeeded !== 1 ? 's' : ''}`;
+        if (data.errors && data.errors.length > 0) {
+            msg += `\n\n⚠️ ${data.errors.length} row${data.errors.length !== 1 ? 's' : ''} skipped:\n`;
+            for (const err of data.errors) {
+                msg += `\nRow ${err.row} "${err.title}": ${err.errors.join('; ')}`;
+            }
+        }
+        importStatus.textContent = msg;
+        importStatus.style.display = 'block';
+        if (!data.errors || data.errors.length === 0) {
+            setTimeout(() => {
+                importWinnersModal.classList.add('hidden');
+            }, 1500);
+        }
+    } catch (e) {
+        importStatus.textContent = '❌ Import failed: ' + e.message;
+        importStatus.style.display = 'block';
+        importWinnersSubmitBtn.disabled = false;
+        importWinnersSubmitBtn.textContent = 'Import CSV';
+        importWinnersText.focus();
+        return;
+    }
+    importWinnersSubmitBtn.disabled = false;
+    importWinnersSubmitBtn.textContent = 'Import CSV';
+    importWinnersText.focus();
 });
 
 // ============================================================
@@ -1443,7 +2197,11 @@ socket.on('data_changed', () => {
     // Don't interrupt if user is in a modal, editing a title, or in voting mode
     if (!participantsModal.classList.contains('hidden') ||
         !winnersModal.classList.contains('hidden') ||
-        !adminModal.classList.contains('hidden')) {
+        !adminModal.classList.contains('hidden') ||
+        !debtMatrixModal.classList.contains('hidden')) {
+        if (!debtMatrixModal.classList.contains('hidden') && !showVoting) {
+            fetchDebtMatrix().then(renderDebtMatrix);
+        }
         return;
     }
     if (showVoting) {
@@ -1514,7 +2272,7 @@ socket.on('winners_changed', () => {
 });
 
 // Canvas: center circle click → SPIN
-const CENTER_R = 80;
+const CENTER_R = 440;
 canvas.addEventListener('click', (e) => {
     if (isSpinning) return;
     const rect = canvas.getBoundingClientRect();
@@ -1535,7 +2293,40 @@ canvas.addEventListener('mousemove', (e) => {
 
 (async function init() {
     loadActiveIds();
+    await fetchMediaLists();
     await fetchData();
     await fetchWinners();
     renderAll();
+
+    // Recover incomplete spin state
+    try {
+        const raw = localStorage.getItem('incompleteWinner');
+        if (raw) {
+            const info = JSON.parse(raw);
+            const winnerRecord = winners.find(x => x.id == info.winnerRecordId);
+            if (winnerRecord && !winnerRecord.judgement) {
+                lastWinnerInfo = {
+                    seg: { name: info.titleName, watcherName: info.watcherName, points: info.points },
+                    totalPts: info.totalPts,
+                    winnerId: info.winnerRecordId,
+                };
+                showVoting = true;
+                watcherVotes = {};
+                for (const pid of info.participantIds) {
+                    const w = allWatchers.find(x => x.id == pid);
+                    watcherVotes[pid] = (w && w.name == info.watcherName) ? 'na' : 'pass';
+                }
+                verdictBtn.classList.remove('faded');
+                verdictBtn.disabled = false;
+                abortBtn.classList.remove('faded');
+                abortBtn.disabled = false;
+                winnerText.textContent = `🏆 ${info.titleName} 🏆`;
+                winnerDetails.textContent = `Weight: ${info.points}/${info.totalPts} — by ${info.watcherName}`;
+                winnerDisplay.classList.remove('hidden');
+                spinBtn.classList.add('faded');
+                spinBtn.disabled = true;
+                renderWatchers();
+            }
+        }
+    } catch (e) { /* ignore corrupt recovery data */ }
 })();

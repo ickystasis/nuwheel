@@ -26,15 +26,18 @@ WORKDIR /app
 # Copy application code
 COPY app/          app/
 COPY nginx/        nginx/
-COPY run.sh        .
 COPY run.py        .
-
-# Permissions
-RUN chmod +x run.sh
 
 # Create data dir for SQLite
 RUN mkdir -p /data
 
 EXPOSE 9642
 
-CMD ["./run.sh"]
+ENTRYPOINT sh -c '\
+    mkdir -p /data && \
+    echo "Starting nginx..." && \
+    nginx -c /app/nginx/nginx.conf && \
+    echo "Starting Flask-SocketIO..." && \
+    cd /app && \
+    PYTHONPATH=/app exec python run.py\
+'

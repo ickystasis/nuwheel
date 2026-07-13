@@ -1,22 +1,63 @@
+import os
 import sqlite3
-from flask import g
+from flask import current_app, g
+
+ACTIVE_CONNECTIONS = set()
 
 
 def get_db(app):
     """Get the database connection for the current request context."""
     if 'db' not in g:
-        g.db = sqlite3.connect(app.config['DATABASE'])
-        g.db.row_factory = sqlite3.Row
-        g.db.execute('PRAGMA journal_mode=WAL')
-        g.db.execute('PRAGMA foreign_keys=ON')
+        conn = sqlite3.connect(app.config['DATABASE'], check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute('PRAGMA journal_mode=DELETE')
+        conn.execute('PRAGMA foreign_keys=ON')
+        g.db = conn
+        ACTIVE_CONNECTIONS.add(conn)
     return g.db
 
 
 def close_db(e=None):
     """Close the database connection at the end of a request."""
-    db = g.pop('db', None)
+    try:
+        db = g.pop('db', None)
+    except RuntimeError:
+        db = None
+
     if db is not None:
-        db.close()
+        ACTIVE_CONNECTIONS.discard(db)
+        try:
+            db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.close()
+        except sqlite3.ProgrammingError:
+            pass
+
+    for conn in list(ACTIVE_CONNECTIONS):
+        ACTIVE_CONNECTIONS.discard(conn)
+        try:
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.close()
+        except sqlite3.ProgrammingError:
+            pass
+
+    try:
+        app = current_app._get_current_object()
+    except RuntimeError:
+        return
+
+    for suffix in ('-wal', '-shm'):
+        try:
+            os.remove(app.config['DATABASE'] + suffix)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
 
 
 def init_db(app):
@@ -28,12 +69,18 @@ def init_db(app):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 points INTEGER NOT NULL DEFAULT 0,
+                color TEXT NOT NULL DEFAULT '#4ECDC4',
                 created_at TEXT DEFAULT (datetime('now'))
             )
         ''')
         # Migration: add points column if upgrading from older schema
         try:
             db.execute('ALTER TABLE watchers ADD COLUMN points INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        # Migration: add color column if upgrading from older schema
+        try:
+            db.execute("ALTER TABLE watchers ADD COLUMN color TEXT NOT NULL DEFAULT '#4ECDC4'")
         except sqlite3.OperationalError:
             pass  # column already exists
         # Migration: add punish_streak column if upgrading from older schema
@@ -65,12 +112,20 @@ def init_db(app):
                 weight INTEGER NOT NULL,
                 total_weight INTEGER NOT NULL,
                 participants TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                votes TEXT DEFAULT '{}',
+                judgement TEXT DEFAULT '',
                 won_at TEXT DEFAULT (datetime('now'))
             )
         ''')
         # Migration: add participants column if upgrading from older schema
         try:
             db.execute('ALTER TABLE winners ADD COLUMN participants TEXT DEFAULT ""')
+        except sqlite3.OperationalError:
+            pass
+        # Migration: add status column if upgrading from older schema
+        try:
+            db.execute("ALTER TABLE winners ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
         except sqlite3.OperationalError:
             pass
         db.execute('''
@@ -92,5 +147,57 @@ def init_db(app):
             db.execute('ALTER TABLE winners ADD COLUMN votes TEXT DEFAULT "{}"')
         except sqlite3.OperationalError:
             pass
+        # Migration: add punish_streak column to winners
+        try:
+            db.execute('ALTER TABLE winners ADD COLUMN punish_streak INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        # Migration: add watcher_budget column to winners
+        try:
+            db.execute('ALTER TABLE winners ADD COLUMN watcher_budget INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        # Migration: add watcher_movie_count column to winners
+        try:
+            db.execute('ALTER TABLE winners ADD COLUMN watcher_movie_count INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        # Migration: add wheel_movies column to winners
+        try:
+            db.execute('ALTER TABLE winners ADD COLUMN wheel_movies TEXT DEFAULT "{}"')
+        except sqlite3.OperationalError:
+            pass
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS debts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                debtor_id INTEGER NOT NULL,
+                creditor_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (debtor_id) REFERENCES watchers(id) ON DELETE CASCADE,
+                FOREIGN KEY (creditor_id) REFERENCES watchers(id) ON DELETE CASCADE,
+                UNIQUE(debtor_id, creditor_id)
+            )
+        ''')
+        # Migration: add amount column as INTEGER if upgrading from REAL
+        try:
+            db.execute('ALTER TABLE debts ADD COLUMN amount INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        # Migration: debt ledger for audit trail
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS debt_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                debtor_id INTEGER NOT NULL,
+                creditor_id INTEGER NOT NULL,
+                delta INTEGER NOT NULL,
+                remaining INTEGER NOT NULL,
+                winner_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (debtor_id) REFERENCES watchers(id) ON DELETE CASCADE,
+                FOREIGN KEY (creditor_id) REFERENCES watchers(id) ON DELETE CASCADE,
+                FOREIGN KEY (winner_id) REFERENCES winners(id)
+            )
+        ''')
         db.commit()
     app.teardown_appcontext(close_db)

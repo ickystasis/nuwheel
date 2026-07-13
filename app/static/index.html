@@ -15,33 +15,70 @@
 
         <!-- Top Buttons -->
         <div class="add-section">
-            <button id="addWatcherBtn" class="btn btn-add">👤 Select Watchers</button>
+            <button id="addWatcherBtn" class="btn btn-add">👤 Select Victims</button>
             <button id="winnersBtn" class="btn btn-winners">🏆 Previous Winners</button>
+            <button id="statsBtn" class="btn btn-admin">📊 Stats</button>
+            <button id="debtMatrixBtn" class="btn btn-admin">💳 Debt Matrix</button>
             <button id="adminBtn" class="btn btn-admin">🔧 Admin</button>
+            <button id="spinControlsBtn" class="btn btn-admin">⚙️ Spin Settings</button>
+            <label for="centerImageInput" class="btn btn-admin" style="cursor:pointer">🖼️ Center Image</label>
+            <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
         </div>
 
         <!-- Main Layout -->
         <div class="main-layout">
             <!-- Watchers Panel -->
             <div class="list-panel" id="watchersPanel">
-                <h2>Participants</h2>
+                <div class="watcher-panel-header">
+                    <h2>Victims</h2>
+                    <label class="main-bypass">
+                        <input type="checkbox" id="bypassChecks" />
+                        Bypass point assignment checks when spinning
+                    </label>
+                </div>
                 <div id="watchersContainer"></div>
-                <p id="emptyMsg" class="empty-msg">No participants yet! Click "Select Watchers" above. ✨</p>
+                <p id="emptyMsg" class="empty-msg">No Victims yet! Click "Select Victims" above. ✨</p>
             </div>
 
             <!-- Wheel Panel -->
             <div class="wheel-panel">
                 <div class="wheel-wrapper">
                     <div class="pointer">▼</div>
-                    <canvas id="wheelCanvas" width="1500" height="1500"></canvas>
+                    <canvas id="wheelCanvas" width="2250" height="2250"></canvas>
                 </div>
                 <div class="wheel-info" id="wheelInfo">
                     <span id="totalWeight">Total weight: 0</span>
                 </div>
 
                 <div class="action-row" id="actionRow">
-                    <button id="verdictBtn" class="btn btn-verdict action-btn faded">⚖️ Render Verdict</button>
+                    <button id="shuffleBtn" class="btn btn-shuffle">🔀 Shuffle Wheel</button>
+                    <button id="abortBtn" class="btn btn-abort action-btn faded" disabled>🚫 Abort Session</button>
+                    <button id="verdictBtn" class="btn btn-verdict action-btn faded" disabled>⚖️ Render Verdict</button>
                     <button id="spinBtn" class="btn btn-accept action-btn faded" disabled>✓ Accept ✓</button>
+                </div>
+
+                <!-- Spin Settings Modal -->
+                <div id="spinSettingsModal" class="modal-overlay hidden">
+                    <div class="modal-content" style="max-width:380px">
+                        <div class="modal-header">
+                            <h2>⚙️ Spin Settings</h2>
+                            <button id="spinSettingsCloseBtn" class="modal-close-btn">✕</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="slider-row" style="margin-bottom:1rem">
+                                <label for="velocitySlider">Spin duration <span id="velocityValue">1.10</span></label>
+                                <input type="range" id="velocitySlider" min="0.6" max="12.0" step="0.1" value="1.10" />
+                            </div>
+                            <div class="slider-row" style="margin-bottom:1rem">
+                                <label for="frictionGainSlider">Deceleration sharpness <span id="frictionGainValue">0.45</span></label>
+                                <input type="range" id="frictionGainSlider" min="0.0" max="1.0" step="0.05" value="0.45" />
+                            </div>
+                            <div class="slider-row">
+                                <label for="finalStretchSlider">Final crawl <span id="finalStretchValue">0.35</span></label>
+                                <input type="range" id="finalStretchSlider" min="0.0" max="1.0" step="0.05" value="0.35" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div id="returnMsg" class="return-msg hidden"></div>
 
@@ -58,7 +95,7 @@
     <div id="participantsModal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>👤 Select Participants</h2>
+                <h2>👤 Select Victims</h2>
                 <button id="participantsCloseBtn" class="modal-close-btn">✕</button>
             </div>
             <div class="modal-body">
@@ -80,8 +117,39 @@
             <div class="modal-body" id="winnersList">
                 <p class="empty-msg">No winners yet! Spin the wheel~ ✨</p>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                <button id="importWinnersBtn" class="btn btn-clear-winners">📥 Import History</button>
                 <button id="clearWinnersBtn" class="btn btn-clear-winners">🗑️ Clear History</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="statsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Victim Stats</h2>
+                <button id="statsCloseBtn" class="modal-close-btn">✕</button>
+            </div>
+            <div class="modal-body" id="statsBody">
+                <p class="empty-msg">Loading stats…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debt Matrix Modal -->
+    <div id="debtMatrixModal" class="modal-overlay hidden">
+        <div class="modal-content debt-matrix-content">
+            <div class="modal-header">
+                <h2>💳 Debt Matrix</h2>
+                <button id="debtMatrixCloseBtn" class="modal-close-btn">✕</button>
+            </div>
+            <div class="modal-body debt-matrix-modal-body">
+                <div id="debtMatrixSummary" style="margin-bottom:0.5rem;font-size:0.85rem;color:#aaa"></div>
+                <table id="debtMatrixTable" class="debt-matrix-table">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -94,12 +162,43 @@
                 <button id="adminCloseBtn" class="modal-close-btn">✕</button>
             </div>
             <div class="modal-body">
-                <div class="new-watcher-row" style="margin-bottom:1rem">
-                    <input type="text" id="adminNewName" placeholder="Watcher name..." maxlength="100" />
-                    <input type="number" id="adminNewPoints" class="points-input" value="0" min="-9999" max="9999" />
-                    <button id="adminAddBtn" class="btn btn-small btn-add">➕ Add</button>
-                </div>
+                    <div class="new-watcher-row" style="margin-bottom:1rem">
+                        <input type="text" id="adminNewName" placeholder="Victim name..." maxlength="100" />
+                        <input type="color" id="adminColorInput" value="#4ECDC4" />
+                        <button id="adminAddBtn" class="btn btn-small btn-add">➕ Add</button>
+                    </div>
                 <div id="adminWatchersList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import History Modal -->
+    <div id="importWinnersModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📥 Import History</h2>
+                <button id="importWinnersCloseBtn" class="modal-close-btn">✕</button>
+            </div>
+            <div class="modal-body">
+            <p class="empty-msg" style="padding:0 0 0.75rem;line-height:1.6">
+                Paste CSV with a header row then data rows (comma-separated):<br><br>
+                <b>Columns:</b> <code style="background:#0f0f1a;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.7rem;">
+                date</code> (when it happened), <code style="background:#0f0f1a;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.7rem;">
+                title_name</code> (movie title), <code style="background:#0f0f1a;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.7rem;">
+                proposer</code> (who suggested it), <code style="background:#0f0f1a;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.7rem;">
+                weight</code> (wheel points), <code style="background:#0f0f1a;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.7rem;">
+                punish</code> (<code>Y</code>/<code>N</code>), then name columns (<code>Y</code>=punish, <code>N</code>=pass, <code>NA</code>=not present).<br><br>
+                Copy this ready-to-paste example (header + data rows):<br>
+                <code style="background:#0f0f1a;padding:0.3rem 0.5rem;border-radius:3px;font-size:0.7rem;display:inline-block;line-height:1.8;text-align:left;">
+date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. matt<br>
+2024-03-15,The Matrix,David,1,Y,N,Y,NA,N,Y,N,Y
+                </code>
+            </p>
+            <textarea id="importWinnersText" rows="8" style="width:100%;padding:0.7rem;border-radius:8px;border:1px solid #2a2a3e;background:#16162a;color:#e0e0e0;font-family:monospace;font-size:0.75rem;"></textarea>
+            <div id="importStatus" style="display:none;margin-top:0.5rem;padding:0.5rem;border-radius:6px;background:#0f0f1a;border:1px solid #2a2a3e;font-size:0.8rem;line-height:1.5;white-space:pre-wrap;"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="importWinnersSubmitBtn" class="btn btn-add">Import CSV</button>
             </div>
         </div>
     </div>
@@ -152,14 +251,58 @@
             color: #a78bfa;
             white-space: nowrap;
         }
+        .debt-matrix-content { width: auto !important; max-width: none !important; display: inline-flex !important; }
+        .debt-matrix-table { border-collapse: collapse; width: auto; font-size: 0.7rem; }
+        .debt-matrix-table th, .debt-matrix-table td { border: 1px solid #2a2a3e; padding: 0.15rem 0.3rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .debt-matrix-table th { background: #1a1a2e; color: #ffd93d; font-weight: 600; }
+        .debt-matrix-table th.row-header { background: #16162a; color: #e0e0e0; }
+        .debt-matrix-table td:first-child,
+        .debt-matrix-table th:first-child { background: #16162a; font-weight: 500; }
+        .debt-matrix-table td.cell-zero { color: #555; }
+        .debt-matrix-table td.cell-positive { color: #e0e0e0; font-weight: 600; }
+        .debt-matrix-table td.cell-editable { cursor: pointer; }
+        .debt-matrix-table td.cell-editable:hover { background: #2a2a3e; }
+        .debt-matrix-table td.cell-diagonal { background: #0f0f1a; }
+        .debt-matrix-table td input { width: 100%; box-sizing: border-box; background: #0f0f1a; border: 1px solid #3a3a52; color: #e0e0e0; padding: 0.1rem; border-radius: 3px; text-align: center; font-size: 0.7rem; }
+        .debt-matrix-table td input:focus { outline: none; border-color: #6bcb77; }
+        .debt-matrix-modal-body { padding: 0.3rem !important; }
+        .pts-tooltip {
+            position: fixed;
+            background: #0f0f1a;
+            border: 1px solid #3a3a52;
+            border-radius: 8px;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            white-space: pre;
+            z-index: 99999;
+            pointer-events: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        .pts-tooltip .pos { color: #6bcb77; }
+        .pts-tooltip .neg { color: #ff6b6b; }
+        .pts-tooltip .summary { color: #ffd93d; border-top: 1px solid #2a2a3e; margin-top: 0.2rem; padding-top: 0.2rem; }
+        .pts-tooltip.hidden { display: none; }
+        #debtMatrixSummary { display: none; }
         .retro-vote-btn:hover {
             background: rgba(124, 58, 237, 0.15);
             border-color: #a78bfa;
             transform: scale(1.05);
         }
+        .winner-entry-gold { background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,200,0,0.06)); border: 1px solid rgba(255,215,0,0.3) !important; }
+        .streak-badge-sm { display:inline-flex; padding:0.1rem 0.4rem; border-radius:999px; background:#5a2a2a; color:#ff6b6b; font-size:0.75rem; font-weight:700; }
+        .vote-chip { display:inline-flex; padding:0.05rem 0.35rem; border-radius:999px; font-size:0.75rem; font-weight:600; border:1px solid transparent; }
+        .vote-chip-pass { background:rgba(46,160,67,0.15); color:#6bcb77; border-color:rgba(46,160,67,0.3); }
+        .vote-chip-punish { background:rgba(218,54,51,0.15); color:#ff6b6b; border-color:rgba(218,54,51,0.3); }
+        .vote-chip-na { background:rgba(255,215,0,0.1); color:#ffd700; border-color:rgba(255,215,0,0.25); }
+        .editable-field { cursor:pointer; border-bottom:1px dashed rgba(255,255,255,0.15); padding:0 0.1rem; }
+        .editable-field:hover { border-bottom-color:#6bcb77; }
+        .editable-input { background:#0f0f1a; border:1px solid #3a3a52; color:#e0e0e0; padding:0.1rem 0.3rem; border-radius:4px; font-size:0.85rem; width:auto; min-width:3rem; }
+        .editable-input:focus { outline:none; border-color:#6bcb77; }
     </style>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="app.js?v=2"></script>
+    <div id="ptsTooltip" class="pts-tooltip hidden"></div>
+    <script src="app.js?v=19"></script>
 </body>
 </html>
