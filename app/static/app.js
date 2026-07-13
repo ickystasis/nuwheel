@@ -550,7 +550,12 @@ function renderWatchers() {
     }
 
     emptyMsg.style.display = 'none';
-    spinBtn.disabled = segments.length === 0;
+    spinBtn.disabled = showVoting || segments.length === 0;
+
+    // Hide Accept button during voting (in case renderAll was called)
+    if (showVoting) {
+        spinBtn.classList.add('faded');
+    }
 
     for (const w of active) {
         const card = document.createElement('div');
@@ -780,7 +785,7 @@ function createTitleRow(watcher, title, index) {
                     drawWheel(wheelRotation);
                     updateWheelInfo();
                     if (shouldRefresh) refreshWatchersPreservingFocus();
-                    spinBtn.disabled = segments.length === 0;
+                    if (!showVoting) spinBtn.disabled = segments.length === 0;
                 } catch (e) {}
             } else if (name) {
                 // New title — create on backend directly
@@ -799,7 +804,7 @@ function createTitleRow(watcher, title, index) {
                     drawWheel(wheelRotation);
                     updateWheelInfo();
                     if (shouldRefresh) refreshWatchersPreservingFocus();
-                    spinBtn.disabled = segments.length === 0;
+                    if (!showVoting) spinBtn.disabled = segments.length === 0;
                 } catch (e) {}
             }
         } finally {
@@ -1012,11 +1017,21 @@ function drawWheel(rotation) {
     ctx.lineWidth = Math.max(1, Math.floor(wheelSize / 280));
     ctx.stroke();
     if (!centerImage) {
-        ctx.fillStyle = '#ffd93d';
-        ctx.font = 'bold 44px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('SPIN', cx, cy);
+        if (showVoting) {
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⚖️ VOTING', cx, cy);
+        } else if (lastWinnerInfo) {
+            // Never show SPIN when a winner is pending
+        } else {
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 44px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('SPIN', cx, cy);
+        }
     }
 }
 
@@ -1056,7 +1071,20 @@ function getWinnerSegmentIndex() {
 // ============================================================
 
 function spinWheel() {
-    if (isSpinning || segments.length < 1) return;
+    if (showVoting) {
+        returnMsg.textContent = '⚖️ Voting in progress — accept or abort first';
+        returnMsg.style.color = '#ff6b6b';
+        returnMsg.classList.remove('hidden');
+        return;
+    }
+    if (lastWinnerInfo) return;
+    if (isSpinning) return;
+    if (segments.length < 1) {
+        returnMsg.textContent = '📭 No segments to spin';
+        returnMsg.style.color = '#ff6b6b';
+        returnMsg.classList.remove('hidden');
+        return;
+    }
 
     // Budget validation (uses computed points with floor of 1)
     const active = getActiveWatchers();
@@ -1160,6 +1188,13 @@ function onSpinComplete() {
 
 async function acceptResults() {
     if (!lastWinnerInfo) return;
+
+    // Lock spinning immediately — before any async work
+    showVoting = true;
+    isSpinning = true;
+    spinBtn.classList.add('faded');
+    spinBtn.disabled = true;
+
     const seg = lastWinnerInfo.seg;
     const active = getActiveWatchers();
     const participantNames = active.map(w => w.name).join(', ');
@@ -1195,7 +1230,6 @@ async function acceptResults() {
     renderAll();
 
     // Activate voting mode: show vote toggles + Render Verdict + Abort buttons
-    showVoting = true;
     const activeWatchers = getActiveWatchers();
     watcherVotes = {};
     for (const w of activeWatchers) {
@@ -1206,10 +1240,6 @@ async function acceptResults() {
     verdictBtn.disabled = false;
     abortBtn.classList.remove('faded');
     abortBtn.disabled = false;
-
-    // Hide Accept button
-    spinBtn.classList.add('faded');
-    spinBtn.disabled = true;
 }
 
 // ============================================================
@@ -1526,58 +1556,19 @@ function renderWinnersList() {
         titleRow.style.cssText = 'display:flex;align-items:center;gap:0.4rem;';
 
         const judgeBtn = document.createElement('span');
-        judgeBtn.style.cssText = 'font-size:1.1rem;';
+        judgeBtn.style.cssText = 'font-size:1.1rem;cursor:default;';
         if (w.judgement === 'aborted') {
             judgeBtn.textContent = '🚫';
             judgeBtn.title = 'Aborted';
         } else if (w.judgement === 'punish') {
             judgeBtn.textContent = '👎';
-            judgeBtn.title = 'Punish — click to toggle';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'pass';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'Punished';
         } else if (w.judgement === 'pass') {
             judgeBtn.textContent = '👍';
-            judgeBtn.title = 'Pass — click to toggle';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'punish';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'Passed';
         } else {
             judgeBtn.textContent = '❓';
-            judgeBtn.title = 'No verdict — click to set';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'punish';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'No verdict';
         }
         titleRow.appendChild(judgeBtn);
 
@@ -2437,8 +2428,10 @@ socket.on('data_changed', () => {
 socket.on('spin_completed', (data) => {
     // Don't override if we're mid-spin ourselves
     if (isSpinning) return;
-    // Don't override if Accept is showing (local spinner already handled this)
+    // Don't override if local spinner already handled this (Accept button visible)
     if (!spinBtn.classList.contains('faded')) return;
+    // Don't override if we're in voting mode
+    if (showVoting) return;
 
     // All clients have the same segment order (DB display_order), so the same
     // final angle lands on the same slice for everyone.
@@ -2493,7 +2486,6 @@ socket.on('winners_changed', () => {
 
 // Canvas: center circle click → SPIN
 canvas.addEventListener('click', (e) => {
-    if (isSpinning) return;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -2507,7 +2499,7 @@ canvas.addEventListener('mousemove', (e) => {
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
     const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-    canvas.style.cursor = (dist <= CENTER_R && !isSpinning) ? 'pointer' : 'default';
+    canvas.style.cursor = (dist <= CENTER_R && !isSpinning && !showVoting && !lastWinnerInfo) ? 'pointer' : 'default';
 });
 
 (async function init() {
@@ -2537,6 +2529,7 @@ canvas.addEventListener('mousemove', (e) => {
                     drawWheel(wheelRotation);
                 }
                 showVoting = true;
+                isSpinning = true;
                 watcherVotes = {};
                 for (const pid of info.participantIds) {
                     const w = allWatchers.find(x => x.id == pid);

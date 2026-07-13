@@ -22,6 +22,9 @@
 - Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
+- Fixed Docker build not picking up file changes on Windows (use `--build` flag)
+- Spin is now properly blocked during voting phase (JS guards + error message)
+- Canvas center-click can no longer bypass spin guards during voting
 
 ### Server-Side Persistence
 - Center image, spin settings, and active participant selection now stored server-side via new `app_settings` DB table and `/api/settings` endpoints
@@ -50,6 +53,8 @@
 ### Flow & Lifecycle
 - Shuffle order preserved across Accept, Abort, and Verdict (only resets on tile add/remove or manual shuffle)
 - Shuffle hidden during vote phase (added showVoting check)
+- Voting-phase spin attempt shows error message "Voting in progress — accept or abort first"
+- Previous winners modal: verdict judgement emojis are display-only (no longer toggleable)
 - Abort timeout: clears lastWinnerInfo before renderAll, no longer shows Accept button after abort
 - Verdict timeout: same ordering fix, Abort button hidden immediately on verdict click
 - "Bypass point assignment checks" renamed to "Point Override"

@@ -14,6 +14,9 @@ services:
       - wheel-data:/data
       # OR: uncomment below to use a local directory instead
       # - ./data:/data
+      # Mount music/cheers directories so you can add .wav files without rebuilding
+      # - ./app/static/music:/app/app/static/music
+      # - ./app/static/cheers:/app/app/static/cheers
     restart: unless-stopped
     environment:
       - DB_DIR=/data
