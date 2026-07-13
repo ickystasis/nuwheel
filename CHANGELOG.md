@@ -2,6 +2,14 @@
 
 ## [unreleased]
 
+### Verdict Messages
+- Punish/pass/abort messages now persist on screen until the next spin (instead of auto-dismissing after 2-2.5s)
+- Punish message shows per-user breakdown: `2 added to David (5 total)`, one line per user
+- Pass message shows per-user breakdown: `1 returned to Chris`, one line per user
+- Pass endpoint now clears debts in both directions (winner as debtor + winner as creditor), so all returned points are reported
+- Debts already cleared by `process-win` are included in the pass message
+- Pass message omits "streak reset to 0" when streak is already 0
+
 ### Winner History
 - All tooltips (victim panel + previous winners) increased by 30%
 - Previous winners tooltip header shows `{user}'s movies this spin` instead of generic text

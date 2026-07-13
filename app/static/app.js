@@ -1293,7 +1293,6 @@ async function abortSession() {
         abortBtn.disabled = true;
         spinBtn.classList.add('faded');
         spinBtn.disabled = true;
-        returnMsg.classList.add('hidden');
     }, 2000);
 }
 
@@ -1353,14 +1352,17 @@ async function renderVerdict() {
         }
 
         // Refund: clear debts owed to the winner (moved from acceptResults)
+        let processWinCleared = [];
         if (winnerData && active.length > 1) {
             const refundIds = active.map(w => w.id);
             try {
-                await fetch('/api/spin/process-win', {
+                const pwRes = await fetch('/api/spin/process-win', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ winner_id: winnerData.id, participant_ids: refundIds, winner_record_id: lastWinnerInfo.winnerId }),
                 });
+                const pwData = await pwRes.json();
+                processWinCleared = pwData.cleared || [];
             } catch { /* ignore */ }
         }
 
@@ -1378,17 +1380,27 @@ async function renderVerdict() {
 
             await fetchData();
             renderAll();
-            returnMsg.textContent = `👎 Punished! ${seg.watcherName} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)`;
+            const stolenLines = (data.stolen_from || []).map(s => `${s.amount} added to ${escHtml(s.thief_name)} (${s.total_debt} total)`).join('<br>');
+            returnMsg.innerHTML = `👎 Punished! ${escHtml(seg.watcherName)} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)<br>${stolenLines}`;
         } else {
             // Execute pass logic
-            await fetch('/api/spin/pass', {
+            const passRes = await fetch('/api/spin/pass', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ winner_id: winnerData.id }),
+                body: JSON.stringify({ winner_id: winnerData.id, participant_ids: active.map(w => w.id), winner_record_id: lastWinnerInfo.winnerId, process_win_cleared: processWinCleared }),
             });
+            const passData = await passRes.json();
             await fetchData();
             renderAll();
-            returnMsg.textContent = `👍 Passed! ${seg.watcherName}'s streak reset to 0.`;
+            const pts = passData.points_saved || 0;
+            const returnedItems = passData.returned_to || [];
+            const streakMsg = passData.streak > 0 ? ` ${escHtml(seg.watcherName)}'s streak reset to 0` : '';
+            let ptsMsg = '';
+            if (returnedItems.length > 0) {
+                const returnedLines = returnedItems.map(r => `${r.amount} returned to ${escHtml(r.name)}`).join('<br>');
+                ptsMsg = ` (${pts} point${pts !== 1 ? 's' : ''} returned)<br>${returnedLines}`;
+            }
+            returnMsg.innerHTML = `👍 Passed!${streakMsg}${ptsMsg}`;
         }
         returnMsg.classList.remove('hidden');
     } catch (e) {
@@ -1409,7 +1421,6 @@ async function renderVerdict() {
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
-        returnMsg.classList.add('hidden');
     }, 2500);
 }
 
