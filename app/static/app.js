@@ -566,7 +566,7 @@ function renderWatchers() {
         header.className = 'watcher-header';
         const rightDiv = document.createElement('div');
 
-        if (!showVoting) {
+        if (!showVoting && !isSpinning) {
             const delBtn = document.createElement('button');
             delBtn.className = 'watcher-del-btn';
             delBtn.textContent = '✕';
