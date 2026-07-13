@@ -566,17 +566,19 @@ function renderWatchers() {
         header.className = 'watcher-header';
         const rightDiv = document.createElement('div');
 
-        const delBtn = document.createElement('button');
-        delBtn.className = 'watcher-del-btn';
-        delBtn.textContent = '✕';
-        delBtn.title = 'Remove from session';
-        delBtn.addEventListener('click', async () => {
-            activeIds.delete(w.id);
-            await saveSettings({ active_ids: [...activeIds] });
-            computeSegments();
-            renderAll();
-        });
-        rightDiv.appendChild(delBtn);
+        if (!showVoting) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'watcher-del-btn';
+            delBtn.textContent = '✕';
+            delBtn.title = 'Remove from session';
+            delBtn.addEventListener('click', async () => {
+                activeIds.delete(w.id);
+                await saveSettings({ active_ids: [...activeIds] });
+                computeSegments();
+                renderAll();
+            });
+            rightDiv.appendChild(delBtn);
+        }
 
         const assignedWeight = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
         const pointsMatch = Math.abs(assignedWeight - w.points) < 0.0001;
