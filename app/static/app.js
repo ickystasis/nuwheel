@@ -566,11 +566,25 @@ function renderWatchers() {
             lines.push(`<span class="summary">6 + ${owedToSum} - ${owedBySum} = ${w.points}</span>`);
             return lines.join('<br>');
         })();
+        const streakTooltipHtml = (() => {
+            const lines = [];
+            if (w.punish_history && w.punish_history.length > 0) {
+                for (const ph of w.punish_history) {
+                    const dt = ph.won_at ? ph.won_at.slice(0, 10) : '';
+                    lines.push(`<span class="neg">👎 ${escHtml(ph.title)}</span> <span style="color:#888;font-size:0.7rem">${dt}</span>`);
+                }
+            } else {
+                lines.push(`<span style="color:#888">Streak: ${w.punish_streak}</span>`);
+            }
+            return lines.join('<br>');
+        })();
         let streakHtml = '';
+        let streakId = null;
         if (w.punish_streak > 0) {
+            streakId = `streak-${w.id}`;
             const scale = 1 + Math.min(w.punish_streak, 5) * 0.33;
             const tone = ['#f3f3a8', '#ffd068', '#ff8c4f', '#de4c39', '#a81c1c'][Math.min(w.punish_streak - 1, 4)];
-            streakHtml = `<span class="streak-badge" style="font-size:${scale.toFixed(2)}rem;background:${tone};color:#111">💀x${w.punish_streak}</span>`;
+            streakHtml = `<span id="${streakId}" class="streak-badge" style="font-size:${scale.toFixed(2)}rem;background:${tone};color:#111">💀x${w.punish_streak}</span>`;
         }
         const color = (w.color || '#4ECDC4').replace(/['"]/g, '');
         const ptsBadgeId = `pts-${w.id}`;
@@ -589,6 +603,23 @@ function renderWatchers() {
             ptsBadge.addEventListener('mouseleave', () => {
                 tooltip.classList.add('hidden');
             });
+        }
+
+        if (streakId) {
+            const streakBadge = header.querySelector('#' + streakId);
+            if (streakBadge && tooltip) {
+                streakBadge.addEventListener('mouseenter', () => {
+                    tooltip.innerHTML = streakTooltipHtml;
+                    tooltip.classList.remove('hidden');
+                });
+                streakBadge.addEventListener('mousemove', (e) => {
+                    tooltip.style.left = (e.clientX + 12) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                });
+                streakBadge.addEventListener('mouseleave', () => {
+                    tooltip.classList.add('hidden');
+                });
+            }
         }
 
         if (showVoting) {
@@ -961,6 +992,7 @@ function spinWheel() {
     }
 
     isSpinning = true;
+    if (shuffleBtn) shuffleBtn.classList.add('hidden');
     lastTickSegment = -1;
     playSpinMusic();
     winnerDisplay.classList.add('hidden');
@@ -1027,6 +1059,8 @@ function onSpinComplete() {
         // Show Accept Results button, enable re-spin via center circle
         spinBtn.classList.remove('faded');
         spinBtn.disabled = false;
+
+        if (shuffleBtn) shuffleBtn.classList.add('hidden');
 
         // Broadcast final angle so all clients land on the exact same slice
         const finalMod = ((wheelRotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
@@ -1250,7 +1284,7 @@ async function renderVerdict() {
     setTimeout(() => {
         showVoting = false;
         watcherVotes = {};
-        renderWatchers();
+        renderAll();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');

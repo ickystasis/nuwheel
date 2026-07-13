@@ -144,6 +144,15 @@ def get_data():
                 (debtor_id, creditor_id, 'punish')
             ).fetchall()
             return [{'title': r['title_name'], 'won_at': r['won_at'], 'delta': r['delta'], 'remaining': r['remaining']} for r in rows]
+        # Punish history for streak tooltip (only punishes in current streak)
+        punish_rows = []
+        if w['punish_streak'] > 0:
+            punish_rows = db.execute(
+                'SELECT title_name, won_at FROM winners '
+                'WHERE watcher_name = ? AND judgement = ? '
+                'ORDER BY won_at DESC LIMIT ?',
+                (w['name'], 'punish', w['punish_streak'])
+            ).fetchall()
         result.append({
             'id': w['id'],
             'name': w['name'],
@@ -151,6 +160,7 @@ def get_data():
             'base_points': w['points'],
             'color': w['color'] or '#4ECDC4',
             'punish_streak': w['punish_streak'],
+            'punish_history': [{'title': r['title_name'], 'won_at': r['won_at']} for r in punish_rows],
             'titles': [dict(t) for t in titles],
             'owed_to': [{'name': name_map[r['debtor_id']], 'amount': r['amount'], 'entries': _get_entries(r['debtor_id'], w['id'])} for r in owed_to_rows],
             'owed_by': [{'name': name_map[r['creditor_id']], 'amount': r['amount'], 'entries': _get_entries(w['id'], r['creditor_id'])} for r in owed_by_rows],
