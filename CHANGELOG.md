@@ -3,6 +3,11 @@
 ## [unreleased]
 
 ### Winner History
+- All tooltips (victim panel + previous winners) increased by 30%
+- Previous winners tooltip header shows `{user}'s movies this spin` instead of generic text
+- Abandoned spins show participants as grey pill chips with 🚫 emoji (matching voted spin layout)
+- Abandoned spin proposer pill uses grey `vote-chip-aborted` styling with 🚫 emoji
+- Proposer excluded from participant chip list for abandoned spins
 - Weight display shows percentage: `W:2/43 (5%)`
 - Proposer pill shows actual vote emoji (👎 punish, 🤷 abstain, 👍 pass) as a styled vote-chip
 - Proposer filtered from watcher vote chip list (no duplicate entry)
@@ -17,6 +22,38 @@
 - Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
+
+### Server-Side Persistence
+- Center image, spin settings, and active participant selection now stored server-side via new `app_settings` DB table and `/api/settings` endpoints
+- Settings persist across browser refreshes and are shared between all clients
+- `GET /api/settings` returns all stored settings; `PUT /api/settings` upserts key-value pairs
+- `GET /api/data` falls back to stored `active_ids` when no query param provided
+
+### UI / Layout
+- Full-viewport layout: victims panel left, wheel center, right side panel
+- Header removed, utility buttons (emoji-only) moved above victims panel
+- Action buttons (Shuffle, Abort, Verdict, Accept) + winner display moved to right panel, stacked vertically
+- Total weight shown at top-right of screen, error messages below right panel buttons
+- Canvas dynamically resized to fill available space
+- Utility buttons get distinct background colors per type
+
+### Wheel Rendering
+- Center image rotates in sync with wheel segments during spin
+- Wheel slow idle rotation (~35s/rev) when idle, stops during spin/vote, resumes after abort/verdict
+- Winning tile rotation saved to localStorage on accept and restored on incomplete spin recovery
+- Shuffle button hidden during incomplete spin state recovery
+- Segment border lines scale with wheel size (no more thick lines on small wheels)
+- Wheel text outline and size proportional to wheel size
+- Text wrapping: shrinks font instead of truncating with …; checks all lines for overflow
+- Winner details now shows percentage: "2/18 (11%) — by David"
+
+### Flow & Lifecycle
+- Shuffle order preserved across Accept, Abort, and Verdict (only resets on tile add/remove or manual shuffle)
+- Shuffle hidden during vote phase (added showVoting check)
+- Abort timeout: clears lastWinnerInfo before renderAll, no longer shows Accept button after abort
+- Verdict timeout: same ordering fix, Abort button hidden immediately on verdict click
+- "Bypass point assignment checks" renamed to "Point Override"
+
 
 ## [1.5.1] - 2026-07-12
 

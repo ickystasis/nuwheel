@@ -9,6 +9,8 @@ let segments = [];
 let isSpinning = false;
 let wheelRotation = 0;
 let animFrameId = null;
+let idleAnimFrameId = null;
+const IDLE_SPEED = 0.003;
 let lastTickSegment = -1;
 let tickAudioCtx = null;
 function playTick() {
@@ -80,22 +82,61 @@ function playCheer() {
         cheerAudio.play();
     } catch (e) {}
 }
+function startIdleSpin() {
+    if (idleAnimFrameId) cancelAnimationFrame(idleAnimFrameId);
+    function idleAnimate() {
+        wheelRotation += IDLE_SPEED;
+        drawWheel(wheelRotation);
+        idleAnimFrameId = requestAnimationFrame(idleAnimate);
+    }
+    idleAnimFrameId = requestAnimationFrame(idleAnimate);
+}
+
+function stopIdleSpin() {
+    if (idleAnimFrameId) {
+        cancelAnimationFrame(idleAnimFrameId);
+        idleAnimFrameId = null;
+    }
+}
+
 let watcherVotes = {};   // {watcherId: 'pass'|'punish'}
 let showVoting = false;  // whether vote toggles + verdict btn are active
 
-// ---- localStorage helpers ----
-function saveActiveIds() {
-    localStorage.setItem('wheelActiveIds', JSON.stringify([...activeIds]));
+// ---- Server-side settings persistence ----
+async function saveSettings(data) {
+    try {
+        await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+    } catch (e) { /* ignore */ }
 }
 
-function loadActiveIds() {
+async function fetchSettings() {
     try {
-        const saved = localStorage.getItem('wheelActiveIds');
-        if (saved) {
-            const arr = JSON.parse(saved);
-            if (Array.isArray(arr)) activeIds = new Set(arr);
+        const res = await fetch('/api/settings');
+        const settings = await res.json();
+        if (settings.active_ids && Array.isArray(settings.active_ids)) {
+            activeIds = new Set(settings.active_ids);
         }
-    } catch (e) { /* ignore corrupt data */ }
+        if (settings.spin_settings) {
+            spinSettings.duration = settings.spin_settings.duration ?? spinSettings.duration;
+            spinSettings.decelSharpness = settings.spin_settings.decelSharpness ?? spinSettings.decelSharpness;
+            spinSettings.finalCrawl = settings.spin_settings.finalCrawl ?? spinSettings.finalCrawl;
+            if (velocitySlider) velocitySlider.value = spinSettings.duration;
+            if (velocityValue) velocityValue.textContent = spinSettings.duration.toFixed(2);
+            if (frictionGainSlider) frictionGainSlider.value = spinSettings.decelSharpness;
+            if (frictionGainValue) frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
+            if (finalStretchSlider) finalStretchSlider.value = spinSettings.finalCrawl;
+            if (finalStretchValue) finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+        }
+        if (settings.center_image) {
+            const img = new Image();
+            img.onload = () => { centerImage = img; drawWheel(wheelRotation); };
+            img.src = settings.center_image;
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // ---- DOM refs ----
@@ -264,9 +305,7 @@ let CENTER_R = 280;
 // ============================================================
 
 async function fetchData() {
-    const ids = [...activeIds].join(',');
-    const url = ids ? '/api/data?active_ids=' + encodeURIComponent(ids) : '/api/data';
-    const res = await fetch(url);
+    const res = await fetch('/api/data');
     allWatchers = await res.json();
 }
 
@@ -425,7 +464,7 @@ function renderParticipantList() {
         cb.addEventListener('change', async () => {
             if (cb.checked) activeIds.add(w.id);
             else activeIds.delete(w.id);
-            saveActiveIds();
+            await saveSettings({ active_ids: [...activeIds] });
             await fetchData();
             renderAll();
         });
@@ -526,9 +565,9 @@ function renderWatchers() {
         delBtn.className = 'watcher-del-btn';
         delBtn.textContent = '✕';
         delBtn.title = 'Remove from session';
-        delBtn.addEventListener('click', () => {
+        delBtn.addEventListener('click', async () => {
             activeIds.delete(w.id);
-            saveActiveIds();
+            await saveSettings({ active_ids: [...activeIds] });
             computeSegments();
             renderAll();
         });
@@ -960,7 +999,11 @@ function drawWheel(rotation) {
     ctx.fillStyle = '#2a2a3e';
     ctx.fill();
     if (centerImage) {
-        ctx.drawImage(centerImage, cx - centerR, cy - centerR, centerR * 2, centerR * 2);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation);
+        ctx.drawImage(centerImage, -centerR, -centerR, centerR * 2, centerR * 2);
+        ctx.restore();
     }
     ctx.restore();
     ctx.beginPath();
@@ -1029,6 +1072,7 @@ function spinWheel() {
         return;
     }
 
+    stopIdleSpin();
     isSpinning = true;
     if (shuffleBtn) shuffleBtn.classList.add('hidden');
     lastTickSegment = -1;
@@ -1142,6 +1186,7 @@ async function acceptResults() {
             totalPts: lastWinnerInfo.totalPts,
             participantIds: participantIds,
             participantNames: participantNames,
+            wheelRotation: wheelRotation,
         }));
         fetchWinners();
     }
@@ -1211,6 +1256,7 @@ async function abortSession() {
         lastWinnerInfo = null;
         localStorage.removeItem('incompleteWinner');
         renderAll();
+        startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
@@ -1328,6 +1374,7 @@ async function renderVerdict() {
         lastWinnerInfo = null;
         localStorage.removeItem('incompleteWinner');
         renderAll();
+        startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
@@ -1581,7 +1628,8 @@ function renderWinnersList() {
             ? votesData[propIdStr]
             : Object.entries(votesData).find(([k]) => k.toLowerCase() === propName.toLowerCase())?.[1] || 'na';
         let propEmoji, propClass;
-        if (propVote === 'punish') { propEmoji = '👎'; propClass = 'vote-chip-punish'; }
+        if (w.judgement === 'aborted') { propEmoji = '🚫'; propClass = 'vote-chip-aborted'; }
+        else if (propVote === 'punish') { propEmoji = '👎'; propClass = 'vote-chip-punish'; }
         else if (propVote === 'na') { propEmoji = '🤷'; propClass = 'vote-chip-na'; }
         else { propEmoji = '👍'; propClass = 'vote-chip-pass'; }
         const propSpan = document.createElement('span');
@@ -1618,7 +1666,7 @@ function renderWinnersList() {
         if (propMovieList.length > 0) {
             const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
             const tooltip = document.getElementById('winnersTooltip');
-            const html = `<span style="color:#ffd93d">This spin's movies:</span><br>${tooltipLines.join('<br>')}`;
+            const html = `<span style="color:#ffd93d">${propDispName}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
             const modalContent = document.querySelector('#winnersModal .modal-content');
             propSpan.addEventListener('mouseenter', (e) => {
                 tooltip.innerHTML = html;
@@ -1640,14 +1688,40 @@ function renderWinnersList() {
         // Per-watcher votes row — static text with hover
         const voteChips = document.createElement('div');
         voteChips.style.cssText = 'display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap;font-size:0.8rem;';
-        // For aborted entries, show attendance from participants field
+        // For aborted entries, show attendance from participants field as individual chips
         if (w.judgement === 'aborted') {
             const names = (w.participants || '').split(',').map(s => s.trim()).filter(Boolean);
             if (names.length > 0) {
-                const attendLabel = document.createElement('span');
-                attendLabel.style.cssText = 'font-size:0.75rem;color:#888;';
-                attendLabel.textContent = `👥 Attended: ${names.join(', ')}`;
-                voteChips.appendChild(attendLabel);
+                for (const pName of names) {
+                    if (pName.toLowerCase() === propName.toLowerCase()) continue;
+                    const chip = document.createElement('span');
+                    chip.className = 'vote-chip vote-chip-aborted';
+                    chip.textContent = `🚫 ${pName}`;
+                    chip.style.cssText = 'cursor:default;';
+                    const voterMovieList = spinMovies[pName] || [];
+                    if (voterMovieList.length > 0) {
+                        const tooltipLines = voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+                        const tooltip = document.getElementById('winnersTooltip');
+                        const html = `<span style="color:#ffd93d">${pName}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
+                        const modalContent = document.querySelector('#winnersModal .modal-content');
+                        chip.addEventListener('mouseenter', (e) => {
+                            tooltip.innerHTML = html;
+                            tooltip.classList.remove('hidden');
+                            const rect = modalContent.getBoundingClientRect();
+                            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                            tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                        });
+                        chip.addEventListener('mousemove', (e) => {
+                            const rect = modalContent.getBoundingClientRect();
+                            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                            tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                        });
+                        chip.addEventListener('mouseleave', () => {
+                            tooltip.classList.add('hidden');
+                        });
+                    }
+                    voteChips.appendChild(chip);
+                }
             } else {
                 const noAttend = document.createElement('span');
                 noAttend.style.cssText = 'font-size:0.75rem;color:#666;font-style:italic;';
@@ -1678,7 +1752,7 @@ function renderWinnersList() {
                 if (voterMovieList.length > 0) {
                     const tooltipLines = voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
                     const tooltip = document.getElementById('winnersTooltip');
-                    const html = `<span style="color:#ffd93d">Movies in this spin:</span><br>${tooltipLines.join('<br>')}`;
+                    const html = `<span style="color:#ffd93d">${name}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
                     const modalContent = document.querySelector('#winnersModal .modal-content');
                     chip.addEventListener('mouseenter', (e) => {
                         tooltip.innerHTML = html;
@@ -2039,18 +2113,20 @@ async function recordRetroVote() {
     retroVotes = {};
 }
 
-// Image upload for center button
+// Image upload for center button (persisted server-side)
 document.getElementById('centerImageInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const img = new Image();
     const reader = new FileReader();
     reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
         img.onload = () => {
             centerImage = img;
             drawWheel(wheelRotation);
+            saveSettings({ center_image: dataUrl });
         };
-        img.src = ev.target.result;
+        img.src = dataUrl;
     };
     reader.readAsDataURL(file);
 });
@@ -2064,8 +2140,8 @@ participantsCloseBtn.addEventListener('click', closeParticipantsModal);
 participantsModal.addEventListener('click', (e) => {
     if (e.target === participantsModal) closeParticipantsModal();
 });
-startMovieNightBtn.addEventListener('click', () => {
-    saveActiveIds();
+startMovieNightBtn.addEventListener('click', async () => {
+    await saveSettings({ active_ids: [...activeIds] });
     closeParticipantsModal();
     renderAll();
 });
@@ -2079,17 +2155,24 @@ spinSettingsCloseBtn.addEventListener('click', () => {
 spinSettingsModal.addEventListener('click', (e) => {
     if (e.target === spinSettingsModal) spinSettingsModal.classList.add('hidden');
 });
+function saveSpinSettings() {
+    saveSettings({ spin_settings: { ...spinSettings } });
+}
+
 velocitySlider.addEventListener('input', () => {
     spinSettings.duration = parseFloat(velocitySlider.value);
     velocityValue.textContent = spinSettings.duration.toFixed(2);
+    saveSpinSettings();
 });
 frictionGainSlider.addEventListener('input', () => {
     spinSettings.decelSharpness = parseFloat(frictionGainSlider.value);
     frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
+    saveSpinSettings();
 });
 finalStretchSlider.addEventListener('input', () => {
     spinSettings.finalCrawl = parseFloat(finalStretchSlider.value);
     finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+    saveSpinSettings();
 });
 bypassChecksInput.addEventListener('change', () => {
     bypassPointChecks = bypassChecksInput.checked;
@@ -2229,7 +2312,7 @@ adminAddBtn.addEventListener('click', async () => {
     try {
         const w = await addWatcher(name, adminColorInput.value);
         activeIds.add(w.id);
-        saveActiveIds();
+        await saveSettings({ active_ids: [...activeIds] });
         adminNewName.value = '';
         adminColorInput.value = '#4ECDC4';
         renderAdminWatchers();
@@ -2428,11 +2511,12 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 (async function init() {
-    loadActiveIds();
+    await fetchSettings();
     await fetchMediaLists();
     await fetchData();
     await fetchWinners();
     renderAll();
+    startIdleSpin();
     requestAnimationFrame(() => requestAnimationFrame(resizeWheel));
 
     // Recover incomplete spin state
@@ -2442,11 +2526,16 @@ canvas.addEventListener('mousemove', (e) => {
             const info = JSON.parse(raw);
             const winnerRecord = winners.find(x => x.id == info.winnerRecordId);
             if (winnerRecord && !winnerRecord.judgement) {
+                stopIdleSpin();
                 lastWinnerInfo = {
                     seg: { name: info.titleName, watcherName: info.watcherName, points: info.points },
                     totalPts: info.totalPts,
                     winnerId: info.winnerRecordId,
                 };
+                if (info.wheelRotation !== undefined) {
+                    wheelRotation = info.wheelRotation;
+                    drawWheel(wheelRotation);
+                }
                 showVoting = true;
                 watcherVotes = {};
                 for (const pid of info.participantIds) {
@@ -2462,6 +2551,7 @@ canvas.addEventListener('mousemove', (e) => {
                 winnerDisplay.classList.remove('hidden');
                 spinBtn.classList.add('faded');
                 spinBtn.disabled = true;
+                if (shuffleBtn) shuffleBtn.classList.add('hidden');
                 renderWatchers();
             }
         }

@@ -185,6 +185,12 @@ def init_db(app):
             pass
         # Migration: debt ledger for audit trail
         db.execute('''
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        ''')
+        db.execute('''
             CREATE TABLE IF NOT EXISTS debt_ledger (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 debtor_id INTEGER NOT NULL,

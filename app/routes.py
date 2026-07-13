@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import os
 import random
 import re
@@ -116,7 +117,15 @@ def get_data():
         except (ValueError, TypeError):
             participant_ids = all_ids
     else:
-        participant_ids = all_ids
+        stored = db.execute('SELECT value FROM app_settings WHERE key = ?', ('active_ids',)).fetchone()
+        if stored:
+            try:
+                participant_ids = json.loads(stored['value'])
+                participant_ids = [pid for pid in participant_ids if pid in all_ids]
+            except (json.JSONDecodeError, TypeError):
+                participant_ids = all_ids
+        else:
+            participant_ids = all_ids
     pts = _all_points(db, participant_ids)
     result = []
     name_map = {w['id']: w['name'] for w in watchers}
@@ -166,6 +175,44 @@ def get_data():
             'owed_by': [{'name': name_map[r['creditor_id']], 'amount': r['amount'], 'entries': _get_entries(w['id'], r['creditor_id'])} for r in owed_by_rows],
         })
     return jsonify(result)
+
+
+# ── Settings ──
+
+@bp.route('/settings', methods=['GET'])
+def get_settings():
+    db = get_db(current_app)
+    rows = db.execute('SELECT key, value FROM app_settings').fetchall()
+    settings = {}
+    for row in rows:
+        key = row['key']
+        val = row['value']
+        if key in ('spin_settings', 'active_ids'):
+            try:
+                settings[key] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                settings[key] = val
+        else:
+            settings[key] = val
+    return jsonify(settings)
+
+
+@bp.route('/settings', methods=['PUT'])
+def update_settings():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    db = get_db(current_app)
+    for key, val in data.items():
+        if val is None:
+            db.execute('DELETE FROM app_settings WHERE key = ?', (key,))
+        else:
+            str_val = val if isinstance(val, str) else json.dumps(val)
+            db.execute('''INSERT INTO app_settings (key, value) VALUES (?, ?)
+                          ON CONFLICT(key) DO UPDATE SET value = excluded.value''', (key, str_val))
+    db.commit()
+    socketio.emit('settings_updated', data)
+    return jsonify({'ok': True})
 
 
 # ── Watchers ──
