@@ -10,6 +10,9 @@
 - Debts already cleared by `process-win` are included in the pass message
 - Pass message omits "streak reset to 0" when streak is already 0
 
+### UI Safeguards
+- Watcher remove (✕) button hidden during spin, while winner is displayed, and during voting to prevent accidental removal mid-round
+
 ### Winner History
 - All tooltips (victim panel + previous winners) increased by 30%
 - Previous winners tooltip header shows `{user}'s movies this spin` instead of generic text
