@@ -8,53 +8,38 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <header>
-            <h1>🎡 Wheel of Doom<sup>(b)</sup></h1>
-        </header>
-
-        <!-- Top Buttons -->
-        <div class="add-section">
-            <button id="addWatcherBtn" class="btn btn-add">👤 Select Victims</button>
-            <button id="winnersBtn" class="btn btn-winners">🏆 Previous Winners</button>
-            <button id="statsBtn" class="btn btn-admin">📊 Stats</button>
-            <button id="debtMatrixBtn" class="btn btn-admin">💳 Debt Matrix</button>
-            <button id="adminBtn" class="btn btn-admin">🔧 Admin</button>
-            <button id="spinControlsBtn" class="btn btn-admin">⚙️ Spin Settings</button>
-            <label for="centerImageInput" class="btn btn-admin" style="cursor:pointer">🖼️ Center Image</label>
-            <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
-        </div>
-
         <!-- Main Layout -->
         <div class="main-layout">
-            <!-- Watchers Panel -->
-            <div class="list-panel" id="watchersPanel">
-                <div class="watcher-panel-header">
-                    <h2>Victims</h2>
-                    <label class="main-bypass">
-                        <input type="checkbox" id="bypassChecks" />
-                        Bypass point assignment checks when spinning
-                    </label>
+            <!-- Left Column -->
+            <div class="left-column">
+                <div class="add-section">
+                    <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
+                    <button id="winnersBtn" class="btn btn-icon" title="Previous Winners">🏆</button>
+                    <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
+                    <button id="debtMatrixBtn" class="btn btn-icon" title="Debt Matrix">💳</button>
+                    <button id="adminBtn" class="btn btn-icon" title="Admin">🔧</button>
+                    <button id="spinControlsBtn" class="btn btn-icon" title="Spin Settings">⚙️</button>
+                    <label for="centerImageInput" class="btn btn-icon" title="Center Image" style="cursor:pointer">🖼️</label>
+                    <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
                 </div>
-                <div id="watchersContainer"></div>
-                <p id="emptyMsg" class="empty-msg">No Victims yet! Click "Select Victims" above. ✨</p>
+                <div class="list-panel" id="watchersPanel">
+                    <div class="watcher-panel-header">
+                        <h2>Victims</h2>
+                        <label class="main-bypass">
+                            <input type="checkbox" id="bypassChecks" />
+                            Point Override
+                        </label>
+                    </div>
+                    <div id="watchersContainer"></div>
+                    <p id="emptyMsg" class="empty-msg">No Victims yet! ✨</p>
+                </div>
             </div>
 
             <!-- Wheel Panel -->
             <div class="wheel-panel">
                 <div class="wheel-wrapper">
                     <div class="pointer">▼</div>
-                    <canvas id="wheelCanvas" width="2250" height="2250"></canvas>
-                </div>
-                <div class="wheel-info" id="wheelInfo">
-                    <span id="totalWeight">Total weight: 0</span>
-                </div>
-
-                <div class="action-row" id="actionRow">
-                    <button id="shuffleBtn" class="btn btn-shuffle">🔀 Shuffle Wheel</button>
-                    <button id="abortBtn" class="btn btn-abort action-btn faded" disabled>🚫 Abort Session</button>
-                    <button id="verdictBtn" class="btn btn-verdict action-btn faded" disabled>⚖️ Render Verdict</button>
-                    <button id="spinBtn" class="btn btn-accept action-btn faded" disabled>✓ Accept ✓</button>
+                    <canvas id="wheelCanvas" width="1000" height="1000"></canvas>
                 </div>
 
                 <!-- Spin Settings Modal -->
@@ -80,12 +65,25 @@
                         </div>
                     </div>
                 </div>
-                <div id="returnMsg" class="return-msg hidden"></div>
+            </div>
 
-                <!-- Winner Display -->
-                <div id="winnerDisplay" class="winner-display hidden">
-                    <div id="winnerText" class="winner-text"></div>
-                    <div id="winnerDetails" class="winner-details"></div>
+            <!-- Side Panel -->
+            <div class="side-panel" id="sidePanel">
+                <div class="wheel-info" id="wheelInfo">
+                    <span id="totalWeight">Total weight: 0</span>
+                </div>
+                <div class="action-group">
+                    <div class="action-row" id="actionRow">
+                        <button id="shuffleBtn" class="btn btn-shuffle">🔀 Shuffle Wheel</button>
+                        <button id="abortBtn" class="btn btn-abort action-btn faded" disabled>🚫 Abort Session</button>
+                        <button id="verdictBtn" class="btn btn-verdict action-btn faded" disabled>⚖️ Render Verdict</button>
+                        <button id="spinBtn" class="btn btn-accept action-btn faded" disabled>✓ Accept ✓</button>
+                    </div>
+                    <div id="winnerDisplay" class="winner-display hidden">
+                        <div id="winnerText" class="winner-text"></div>
+                        <div id="winnerDetails" class="winner-details"></div>
+                    </div>
+                    <div id="returnMsg" class="return-msg hidden"></div>
                 </div>
             </div>
         </div>
@@ -303,6 +301,6 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <div id="ptsTooltip" class="pts-tooltip hidden"></div>
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=26"></script>
 </body>
 </html>

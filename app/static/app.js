@@ -254,9 +254,10 @@ const SEGMENT_COLORS = [
     '#E8DAEF', '#A9CCE3', '#D5DBDB', '#F9E79F', '#ABEBC6',
 ];
 
-const cx = canvas.width / 2;
-const cy = canvas.height / 2;
-const radius = canvas.width / 2 - 10;
+let cx = canvas.width / 2 || 600;
+let cy = canvas.height / 2 || 600;
+let radius = (canvas.width / 2 || 600) - 10;
+let CENTER_R = 280;
 
 // ============================================================
 //  API
@@ -844,13 +845,15 @@ function drawWheel(rotation) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const count = segments.length;
+    const wheelSize = parseInt(canvas.style.width) || (canvas.width / (window.devicePixelRatio || 1));
+
     if (count === 0) {
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.fillStyle = '#1a1a2e';
         ctx.fill();
         ctx.strokeStyle = '#2a2a3e';
-        ctx.lineWidth = 12;
+        ctx.lineWidth = Math.max(1, Math.floor(radius / 160));
         ctx.stroke();
         ctx.fillStyle = '#555';
         ctx.font = '60px sans-serif';
@@ -863,7 +866,7 @@ function drawWheel(rotation) {
     const totalPts = getTotalWeight();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius + Math.max(2, Math.floor(wheelSize / 160)), 0, Math.PI * 2);
     ctx.fillStyle = '#2a2a3e';
     ctx.fill();
 
@@ -881,7 +884,7 @@ function drawWheel(rotation) {
         ctx.fill();
 
         ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 7;
+        ctx.lineWidth = Math.max(1, Math.floor(wheelSize / 320));
         ctx.stroke();
 
         ctx.save();
@@ -913,26 +916,17 @@ function drawWheel(rotation) {
                 }
             }
             if (currentLine) lines.push(currentLine);
-            if (lines.length > 2) {
-                while (lines.length > 2) {
-                    const lastLine = lines.pop();
-                    const prevLine = lines[lines.length - 1];
-                    const combined = prevLine + ' ' + (lastLine || '');
-                    if (ctx.measureText(combined).width <= maxTextWidth) {
-                        lines[lines.length - 1] = combined;
-                    } else {
-                        lines[lines.length - 1] = prevLine.slice(0, -2) + '…';
-                    }
-                }
-            }
             return lines;
         }
 
-        let fontSize = 80;
+        let fontSize = Math.floor(wheelSize * 0.049);
         let lines = wrapText(fontSize);
-        while (fontSize > 12 && lines.length > 2) {
+        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > maxTextWidth))) {
             fontSize -= 4;
             lines = wrapText(fontSize);
+        }
+        if (lines.length > 2) {
+            lines = [lines.slice(0, -1).join(' ') + '…', lines[lines.length - 1]];
         }
 
         const lineHeight = fontSize * 1.2;
@@ -957,7 +951,7 @@ function drawWheel(rotation) {
     }
 
     // Center circle — clickable SPIN button
-    const centerR = 440;
+    const centerR = CENTER_R;
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
@@ -972,7 +966,7 @@ function drawWheel(rotation) {
     ctx.beginPath();
     ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
     ctx.strokeStyle = '#3a3a52';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = Math.max(1, Math.floor(wheelSize / 280));
     ctx.stroke();
     if (!centerImage) {
         ctx.fillStyle = '#ffd93d';
@@ -1092,7 +1086,7 @@ function onSpinComplete() {
         const seg = segments[idx];
         const totalPts = getTotalWeight();
         winnerText.textContent = `🏆 ${seg.name} 🏆`;
-        winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} — by ${seg.watcherName}`;
+        winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} (${Math.round(seg.points / totalPts * 100)}%) — by ${seg.watcherName}`;
         winnerDisplay.classList.remove('hidden');
         fireConfetti();
 
@@ -1213,17 +1207,17 @@ async function abortSession() {
     setTimeout(() => {
         showVoting = false;
         watcherVotes = {};
+        isSpinning = false;
+        lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
         renderAll();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
-        spinBtn.classList.remove('faded');
-        spinBtn.disabled = false;
+        spinBtn.classList.add('faded');
+        spinBtn.disabled = true;
         returnMsg.classList.add('hidden');
-        isSpinning = false;
-        lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
     }, 2000);
 }
 
@@ -1257,6 +1251,8 @@ async function renderVerdict() {
 
     verdictBtn.classList.add('faded');
     verdictBtn.disabled = true;
+    abortBtn.classList.add('faded');
+    abortBtn.disabled = true;
     returnMsg.classList.add('hidden');
 
     const winnerData = allWatchers.find(w => w.name === seg.watcherName);
@@ -1328,15 +1324,15 @@ async function renderVerdict() {
     setTimeout(() => {
         showVoting = false;
         watcherVotes = {};
+        isSpinning = false;
+        lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
         renderAll();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
         returnMsg.classList.add('hidden');
-        isSpinning = false;
-        lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
     }, 2500);
 }
 
@@ -1394,8 +1390,18 @@ document.head.appendChild(styleSheet);
 // ============================================================
 
 function computeSegments() {
-    // Segments come from the API pre-sorted by display_order (server-shuffled)
+    const oldKeys = segments.map(s => `${s.name}|${s.watcherName}`);
     segments = getActiveSegments();
+    // Preserve the existing order when segment identities haven't changed.
+    // Order only resets when tiles are added/removed or shuffleWheel() is called.
+    if (segments.length === oldKeys.length && segments.length > 0) {
+        const orderMap = new Map(oldKeys.map((k, i) => [k, i]));
+        segments.sort((a, b) => {
+            const ka = `${a.name}|${a.watcherName}`;
+            const kb = `${b.name}|${b.watcherName}`;
+            return (orderMap.get(ka) ?? Infinity) - (orderMap.get(kb) ?? Infinity);
+        });
+    }
 }
 
 // ============================================================
@@ -1407,7 +1413,7 @@ function renderAll() {
     renderWatchers();
     drawWheel(wheelRotation);
     if (shuffleBtn) {
-        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0);
+        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0 || showVoting);
     }
 }
 
@@ -2124,7 +2130,8 @@ function renderAdminWatchers() {
                     if (!res.ok) { alert('Failed to reset streak'); return; }
                     await fetchData();
                     renderAdminWatchers();
-                    renderAll();
+    renderAll();
+    resizeWheel();
                 } catch (e) { alert(e.message); }
             });
             row.appendChild(resetStreakBtn);
@@ -2329,7 +2336,7 @@ socket.on('spin_completed', (data) => {
                 const seg = segments[idx];
                 const totalPts = getTotalWeight();
                 winnerText.textContent = `\uD83C\uDFC6 ${seg.name} \uD83C\uDFC6`;
-                winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} - by ${seg.watcherName}`;
+                winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} (${Math.round(seg.points / totalPts * 100)}%) - by ${seg.watcherName}`;
                 winnerDisplay.classList.remove('hidden');
                 fireConfetti();
             }
@@ -2350,7 +2357,6 @@ socket.on('winners_changed', () => {
 });
 
 // Canvas: center circle click → SPIN
-const CENTER_R = 440;
 canvas.addEventListener('click', (e) => {
     if (isSpinning) return;
     const rect = canvas.getBoundingClientRect();
@@ -2375,6 +2381,7 @@ canvas.addEventListener('mousemove', (e) => {
     await fetchData();
     await fetchWinners();
     renderAll();
+    requestAnimationFrame(() => requestAnimationFrame(resizeWheel));
 
     // Recover incomplete spin state
     try {
@@ -2399,7 +2406,7 @@ canvas.addEventListener('mousemove', (e) => {
                 abortBtn.classList.remove('faded');
                 abortBtn.disabled = false;
                 winnerText.textContent = `🏆 ${info.titleName} 🏆`;
-                winnerDetails.textContent = `Weight: ${info.points}/${info.totalPts} — by ${info.watcherName}`;
+                winnerDetails.textContent = `Weight: ${info.points}/${info.totalPts} (${Math.round(info.points / info.totalPts * 100)}%) — by ${info.watcherName}`;
                 winnerDisplay.classList.remove('hidden');
                 spinBtn.classList.add('faded');
                 spinBtn.disabled = true;
@@ -2408,3 +2415,32 @@ canvas.addEventListener('mousemove', (e) => {
         }
     } catch (e) { /* ignore corrupt recovery data */ }
 })();
+
+// ============================================================
+//  Wheel Resize — dynamic canvas sizing
+// ============================================================
+
+function resizeWheel() {
+    const panel = document.querySelector('.wheel-panel');
+    const wrapper = document.querySelector('.wheel-wrapper');
+
+    const panelRect = panel.getBoundingClientRect();
+    const otherHeight = 0;
+    const availableHeight = panelRect.height - otherHeight - 30;
+    const availableWidth = panelRect.width - 30;
+    let size = Math.floor(Math.min(availableWidth, availableHeight, 1600));
+    size = Math.max(size, 200);
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(size * dpr);
+    canvas.height = Math.floor(size * dpr);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    cx = canvas.width / 2;
+    cy = canvas.height / 2;
+    radius = canvas.width / 2 - 10 * dpr;
+    CENTER_R = Math.floor(size * 0.196 * dpr);
+    drawWheel(wheelRotation);
+}
+
+window.addEventListener('resize', () => requestAnimationFrame(resizeWheel));
