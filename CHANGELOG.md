@@ -2,26 +2,21 @@
 
 ## [unreleased]
 
-### UI / Layout
-- Full-viewport layout: victims panel left, wheel center, right side panel
-- Header removed, utility buttons (emoji-only) moved above victims panel
-- Action buttons (Shuffle, Abort, Verdict, Accept) + winner display moved to right panel, stacked vertically
-- Total weight shown at top-right of screen, error messages below right panel buttons
-- Canvas dynamically resized to fill available space
-- Utility buttons get distinct background colors per type
+### Winner History
+- Weight display shows percentage: `W:2/43 (5%)`
+- Proposer pill shows actual vote emoji (👎 punish, 🤷 abstain, 👍 pass) as a styled vote-chip
+- Proposer filtered from watcher vote chip list (no duplicate entry)
+- All names in vote chips resolved through `allWatchers` case-insensitively for consistent casing
+- Proposer vote lookup uses watcher ID first, then case-insensitive name fallback (handles renames and import casing)
+- Proposer skip check matches by ID or case-insensitive name
+- Tooltips migrated from native `title` attribute to floating `#winnersTooltip` div for OBS window-capture compatibility
+- Tooltip content includes weight percentage per movie
+- `backdrop-filter: blur(4px)` removed from `.modal-overlay` for OBS compatibility
 
-### Wheel Rendering
-- Segment border lines scale with wheel size (no more thick lines on small wheels)
-- Wheel text outline and size proportional to wheel size
-- Text wrapping: shrinks font instead of truncating with …; checks all lines for overflow
-- Winner details now shows percentage: "2/18 (11%) — by David"
-
-### Flow & Lifecycle
-- Shuffle order preserved across Accept, Abort, and Verdict (only resets on tile add/remove or manual shuffle)
-- Shuffle hidden during vote phase (added showVoting check)
-- Abort timeout: clears lastWinnerInfo before renderAll, no longer shows Accept button after abort
-- Verdict timeout: same ordering fix, Abort button hidden immediately on verdict click
-- "Bypass point assignment checks" renamed to "Point Override"
+### Bug Fixes
+- Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
+- Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
+- Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
 
 ## [1.5.1] - 2026-07-12
 

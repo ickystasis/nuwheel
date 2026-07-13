@@ -107,7 +107,7 @@
 
     <!-- Previous Winners Modal -->
     <div id="winnersModal" class="modal-overlay hidden">
-        <div class="modal-content">
+        <div class="modal-content" style="position:relative">
             <div class="modal-header">
                 <h2>🏆 Previous Winners</h2>
                 <button id="modalCloseBtn" class="modal-close-btn">✕</button>
@@ -115,6 +115,7 @@
             <div class="modal-body" id="winnersList">
                 <p class="empty-msg">No winners yet! Spin the wheel~ ✨</p>
             </div>
+            <div id="winnersTooltip" class="pts-tooltip hidden"></div>
             <div class="modal-footer" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
                 <button id="importWinnersBtn" class="btn btn-clear-winners">📥 Import History</button>
                 <button id="clearWinnersBtn" class="btn btn-clear-winners">🗑️ Clear History</button>
@@ -281,6 +282,7 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
         .pts-tooltip .neg { color: #ff6b6b; }
         .pts-tooltip .summary { color: #ffd93d; border-top: 1px solid #2a2a3e; margin-top: 0.2rem; padding-top: 0.2rem; }
         .pts-tooltip.hidden { display: none; }
+        #winnersTooltip { position: absolute; z-index: 99999; }
         #debtMatrixSummary { display: none; }
         .retro-vote-btn:hover {
             background: rgba(124, 58, 237, 0.15);
@@ -301,6 +303,6 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <div id="ptsTooltip" class="pts-tooltip hidden"></div>
-    <script src="app.js?v=26"></script>
+    <script src="app.js?v=35"></script>
 </body>
 </html>

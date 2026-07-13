@@ -1555,16 +1555,39 @@ function renderWinnersList() {
         metaRow.style.cssText = 'display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;';
 
         const maxW = parseFloat(w.total_weight) || 0;
-        const weightStr = maxW > 0 ? `${w.weight}/${maxW}` : `${w.weight}/NA`;
+        const weightStr = maxW > 0 ? `${w.weight}/${maxW} (${Math.round(w.weight / maxW * 100)}%)` : `${w.weight}/NA`;
         const weightSpan = document.createElement('span');
         weightSpan.textContent = `W:${weightStr}`;
         metaRow.appendChild(weightSpan);
 
         metaRow.appendChild(document.createTextNode(' by '));
         const propName = w.watcher_name;
+
+        // Parse votes & wheel_movies early so proposer pill can show their actual vote
+        let votesData = {};
+        if (w.votes && w.votes !== '{}') {
+            try { votesData = JSON.parse(w.votes); } catch (e) {}
+        }
+        let spinMovies = {};
+        try { spinMovies = JSON.parse(w.wheel_movies || '{}'); } catch (e) {}
+
+        // Resolve proposer's watcher ID (handles renames — stored name ≠ current name)
+        const propWatcher = allWatchers.find(x => x.name === propName);
+        const propIdStr = propWatcher ? String(propWatcher.id) : null;
+        const propDispName = propWatcher ? propWatcher.name : propName;
+
+        // Look up proposer's actual vote by ID first, fall back to case-insensitive name match
+        const propVote = (propIdStr && votesData[propIdStr] !== undefined)
+            ? votesData[propIdStr]
+            : Object.entries(votesData).find(([k]) => k.toLowerCase() === propName.toLowerCase())?.[1] || 'na';
+        let propEmoji, propClass;
+        if (propVote === 'punish') { propEmoji = '👎'; propClass = 'vote-chip-punish'; }
+        else if (propVote === 'na') { propEmoji = '🤷'; propClass = 'vote-chip-na'; }
+        else { propEmoji = '👍'; propClass = 'vote-chip-pass'; }
         const propSpan = document.createElement('span');
-        propSpan.textContent = propName;
-        propSpan.style.cssText = 'cursor:help;border-bottom:1px dotted rgba(255,255,255,0.25);';
+        propSpan.className = `vote-chip ${propClass}`;
+        propSpan.textContent = `${propEmoji} ${propDispName}`;
+        propSpan.style.cssText = 'cursor:help;';
         metaRow.appendChild(propSpan);
 
         let d;
@@ -1590,24 +1613,33 @@ function renderWinnersList() {
 
         left.appendChild(metaRow);
 
-        // Parse wheel_movies for tooltips
-        let spinMovies = {};
-        try { spinMovies = JSON.parse(w.wheel_movies || '{}'); } catch (e) {}
-
-        // Replace proposer tooltip with per-spin movies
+        // Replace proposer tooltip with per-spin movies (shared floating tooltip)
         const propMovieList = spinMovies[propName] || [];
         if (propMovieList.length > 0) {
-            const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`);
-            propSpan.title = `This spin's movies:\n${tooltipLines.join('\n')}`;
+            const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+            const tooltip = document.getElementById('winnersTooltip');
+            const html = `<span style="color:#ffd93d">This spin's movies:</span><br>${tooltipLines.join('<br>')}`;
+            const modalContent = document.querySelector('#winnersModal .modal-content');
+            propSpan.addEventListener('mouseenter', (e) => {
+                tooltip.innerHTML = html;
+                tooltip.classList.remove('hidden');
+                const rect = modalContent.getBoundingClientRect();
+                tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+            });
+            propSpan.addEventListener('mousemove', (e) => {
+                const rect = modalContent.getBoundingClientRect();
+                tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+            });
+            propSpan.addEventListener('mouseleave', () => {
+                tooltip.classList.add('hidden');
+            });
         }
 
         // Per-watcher votes row — static text with hover
         const voteChips = document.createElement('div');
         voteChips.style.cssText = 'display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap;font-size:0.8rem;';
-        let votesData = {};
-        if (w.votes && w.votes !== '{}') {
-            try { votesData = JSON.parse(w.votes); } catch (e) {}
-        }
         // For aborted entries, show attendance from participants field
         if (w.judgement === 'aborted') {
             const names = (w.participants || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -1624,9 +1656,11 @@ function renderWinnersList() {
             }
         } else {
             for (const [key, vote] of Object.entries(votesData)) {
+                // Skip proposer — their vote is shown after "by"
+                if (key === propIdStr || key.toLowerCase() === propName.toLowerCase()) continue;
                 const name = /^\d+$/.test(key)
                     ? (allWatchers.find(x => x.id == key)?.name || `User #${key}`)
-                    : key;
+                    : (allWatchers.find(x => x.name.toLowerCase() === key.toLowerCase())?.name || key);
                 const chip = document.createElement('span');
                 if (vote === 'punish') {
                     chip.className = 'vote-chip vote-chip-punish';
@@ -1639,10 +1673,28 @@ function renderWinnersList() {
                     chip.textContent = `👍 ${name}`;
                 }
                 chip.style.cssText = 'cursor:default;';
-                // Per-spin movie tooltip
+                // Per-spin movie tooltip (shared floating tooltip)
                 const voterMovieList = spinMovies[name] || [];
                 if (voterMovieList.length > 0) {
-                    chip.title = `Movies in this spin:\n${voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`).join('\n')}`;
+                    const tooltipLines = voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+                    const tooltip = document.getElementById('winnersTooltip');
+                    const html = `<span style="color:#ffd93d">Movies in this spin:</span><br>${tooltipLines.join('<br>')}`;
+                    const modalContent = document.querySelector('#winnersModal .modal-content');
+                    chip.addEventListener('mouseenter', (e) => {
+                        tooltip.innerHTML = html;
+                        tooltip.classList.remove('hidden');
+                        const rect = modalContent.getBoundingClientRect();
+                        tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                    });
+                    chip.addEventListener('mousemove', (e) => {
+                        const rect = modalContent.getBoundingClientRect();
+                        tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                    });
+                    chip.addEventListener('mouseleave', () => {
+                        tooltip.classList.add('hidden');
+                    });
                 }
                 voteChips.appendChild(chip);
             }
