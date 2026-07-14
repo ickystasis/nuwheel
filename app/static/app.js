@@ -1127,10 +1127,11 @@ function spinWheel() {
 
     function animate(now) {
         const elapsed = now - startTime;
-        const t = Math.min(elapsed / duration, 1);
+        // Final Crawl: extends the animation duration so the wheel spins longer before stopping
+        const effectiveDuration = duration * (1 + spinSettings.finalCrawl * 1.2);
+        const t = Math.min(elapsed / effectiveDuration, 1);
         // Decel Sharpness: exponent for the cubic ease (2 = gentle coast, 7 = hard brake)
-        // Final Crawl: adds to exponent — higher = wheel arrives sooner, crawls longer at end
-        const exp = 2 + spinSettings.decelSharpness * 5 + spinSettings.finalCrawl * 10;
+        const exp = 2 + spinSettings.decelSharpness * 5;
         const eased = 1 - Math.pow(1 - t, exp);
         wheelRotation = startRotation + (targetRotation - startRotation) * eased;
         drawWheel(wheelRotation);
