@@ -13,6 +13,14 @@
 ### UI Safeguards
 - Watcher remove (✕) button hidden during spin, while winner is displayed, and during voting to prevent accidental removal mid-round
 
+### Stats & Debt Matrix
+- Stats modal merged into debt matrix modal — single popup shows debt matrix on top, stats below
+- New stats columns: Pick %, Adjusted Pick % (win rate when on wheel), Punish %, Vote Punish % (how often they vote to punish)
+- 3-month cutoff stats: same stats computed for last 90 days with cutoff date displayed
+- Punish vote tracking: counts how many times each watcher voted to punish
+- Attendance counting now case-insensitive (fixes imported history not counting correctly)
+- Both 📊 and 💳 buttons open the same combined modal
+
 ### Winner History
 - All tooltips (victim panel + previous winners) increased by 30%
 - Previous winners tooltip header shows `{user}'s movies this spin` instead of generic text

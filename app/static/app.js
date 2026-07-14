@@ -167,9 +167,8 @@ const modalCloseBtn = document.getElementById('modalCloseBtn');
 const winnersList = document.getElementById('winnersList');
 const clearWinnersBtn = document.getElementById('clearWinnersBtn');
 const statsBtn = document.getElementById('statsBtn');
-const statsModal = document.getElementById('statsModal');
-const statsCloseBtn = document.getElementById('statsCloseBtn');
 const statsBody = document.getElementById('statsBody');
+const statsCutoffInfo = document.getElementById('statsCutoffInfo');
 
 // Debt matrix refs
 const debtMatrixBtn = document.getElementById('debtMatrixBtn');
@@ -1815,49 +1814,52 @@ function closeWinnersModal() {
     winnersModal.classList.add('hidden');
 }
 
-async function openStatsModal() {
-    statsModal.classList.remove('hidden');
-    statsBody.innerHTML = '<p class="empty-msg">Loading stats…</p>';
-    try {
-        const data = await fetchStats();
-        if (!data.watchers || data.watchers.length === 0) {
-            statsBody.innerHTML = '<p class="empty-msg">No active sessions yet.</p>';
-            return;
-        }
-
-        const rows = data.watchers.map(item => `
-            <tr>
-                <td>${escHtml(item.name)}</td>
-                <td>${item.attendance_count}</td>
-                <td>${item.pick_count}</td>
-                <td>${item.punish_count}</td>
-                <td><span class="stats-pill">${item.attendance_pct.toFixed(1)}%</span></td>
-            </tr>
-        `).join('');
-
-        statsBody.innerHTML = `
-            <div class="winner-entry-meta" style="margin-bottom:0.75rem">Active sessions: ${data.total_active_sessions}</div>
+function renderStatsTable(items, totalSessions) {
+    if (!items || items.length === 0) return '<p class="empty-msg">No stats yet.</p>';
+    const rows = items.map(item => `
+        <tr>
+            <td><strong>${escHtml(item.name)}</strong></td>
+            <td>${item.attendance_count}</td>
+            <td>${item.pick_count}</td>
+            <td>${item.punish_count}</td>
+            <td>${item.punish_vote_count}</td>
+            <td><span class="stats-pill">${item.attendance_pct}%</span></td>
+            <td><span class="stats-pill" style="background:rgba(255,217,61,0.14);color:#ffd93d">${item.pick_pct}%</span></td>
+            <td><span class="stats-pill" style="background:rgba(167,139,250,0.14);color:#a78bfa">${item.adjusted_pick_pct}%</span></td>
+            <td><span class="stats-pill" style="background:rgba(255,107,107,0.14);color:#ff6b6b">${item.punish_pct}%</span></td>
+            <td>${item.punish_vote_pct}%</td>
+        </tr>
+    `).join('');
+    return `
+        <div style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem">Sessions: ${totalSessions}</div>
+        <div style="overflow-x:auto">
             <table class="stats-table">
                 <thead>
                     <tr>
                         <th>Victim</th>
-                        <th>Attendance</th>
+                        <th>Att.</th>
                         <th>Picks</th>
-                        <th>Punishes</th>
-                        <th>Share</th>
+                        <th>Pun.</th>
+                        <th>⚖️Votes</th>
+                        <th>Att.%</th>
+                        <th>Pick%</th>
+                        <th>Adj.Pick%</th>
+                        <th>Pun.%</th>
+                        <th>VotePun%</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
-        `;
-    } catch (e) {
-        statsBody.innerHTML = '<p class="empty-msg">Could not load stats right now.</p>';
-    }
+        </div>
+    `;
 }
 
-function closeStatsModal() {
-    statsModal.classList.add('hidden');
+async function openStatsModal() {
+    // Open the combined debt matrix modal
+    await openDebtMatrix();
 }
+
+function closeStatsModal() {}
 
 // ============================================================
 //  Debt Matrix
@@ -2014,11 +2016,24 @@ async function saveDebtCell(td, inp) {
 
 async function openDebtMatrix() {
     try {
-        const data = await fetchDebtMatrix();
-        renderDebtMatrix(data);
+        const [debtData, statsData] = await Promise.all([fetchDebtMatrix(), fetchStats()]);
+        renderDebtMatrix(debtData);
+        // Render stats
+        if (statsData.cutoff_date) {
+            statsCutoffInfo.textContent = `3-month cutoff: ${statsData.cutoff_date}`;
+        }
+        const allTimeHtml = renderStatsTable(statsData.watchers, statsData.total_active_sessions);
+        const recentHtml = statsData.recent_watchers
+            ? renderStatsTable(statsData.recent_watchers, statsData.recent_total_sessions)
+            : '';
+        statsBody.innerHTML = `
+            <h4 style="color:#e0e0e0;margin:0 0 0.5rem">All Time</h4>
+            ${allTimeHtml}
+            ${recentHtml ? `<hr style="border-color:#2a2a3e;margin:1rem 0"><h4 style="color:#e0e0e0;margin:0 0 0.5rem">Last 3 Months</h4>${recentHtml}` : ''}
+        `;
         debtMatrixModal.classList.remove('hidden');
     } catch (e) {
-        alert('Failed to load debt matrix: ' + e.message);
+        alert('Failed to load data: ' + e.message);
     }
 }
 
@@ -2338,10 +2353,6 @@ winnersModal.addEventListener('click', (e) => {
     if (e.target === winnersModal) closeWinnersModal();
 });
 statsBtn.addEventListener('click', openStatsModal);
-statsCloseBtn.addEventListener('click', closeStatsModal);
-statsModal.addEventListener('click', (e) => {
-    if (e.target === statsModal) closeStatsModal();
-});
 debtMatrixBtn.addEventListener('click', openDebtMatrix);
 debtMatrixCloseBtn.addEventListener('click', closeDebtMatrix);
 debtMatrixModal.addEventListener('click', (e) => {

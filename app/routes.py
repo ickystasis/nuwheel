@@ -627,42 +627,74 @@ def import_winners():
 @bp.route('/stats', methods=['GET'])
 def get_stats():
     """Return aggregate stats for active history entries."""
+    from datetime import datetime, timedelta
     db = get_db(current_app)
     rows = db.execute(
-        "SELECT id, title_name, watcher_name, weight, total_weight, participants, status, judgement, won_at "
+        "SELECT id, title_name, watcher_name, weight, total_weight, participants, status, judgement, votes, won_at "
         "FROM winners WHERE status != 'disabled' ORDER BY won_at DESC"
     ).fetchall()
 
+    cutoff = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    recent_rows = [r for r in rows if r['won_at'] and r['won_at'] >= cutoff]
+
     watchers = db.execute('SELECT id, name FROM watchers ORDER BY created_at ASC').fetchall()
-    watcher_names = [w['name'] for w in watchers]
-    stats = []
-    for watcher in watchers:
-        name = watcher['name']
-        attendance_count = 0
-        pick_count = 0
-        punish_count = 0
-        for row in rows:
-            participants = [p.strip() for p in (row['participants'] or '').split(',') if p.strip()]
-            if name in participants:
-                attendance_count += 1
-            if row['watcher_name'] == name:
-                pick_count += 1
-            if row['judgement'] == 'punish' and row['watcher_name'] == name:
-                punish_count += 1
-        stats.append({
-            'id': watcher['id'],
-            'name': name,
-            'attendance_count': attendance_count,
-            'pick_count': pick_count,
-            'punish_count': punish_count,
-            'attendance_pct': round(attendance_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-            'pick_pct': round(pick_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-            'punish_pct': round(punish_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-        })
+
+    def compute_stats_for_rows(source_rows):
+        total = len(source_rows)
+        result = []
+        for watcher in watchers:
+            name = watcher['name']
+            name_lower = name.lower()
+            attendance_count = 0
+            pick_count = 0
+            punish_count = 0
+            punish_vote_count = 0
+            for row in source_rows:
+                participants = [p.strip() for p in (row['participants'] or '').split(',') if p.strip()]
+                if name_lower in (p.lower() for p in participants):
+                    attendance_count += 1
+                if (row['watcher_name'] or '').lower() == name_lower:
+                    pick_count += 1
+                if row['judgement'] == 'punish' and (row['watcher_name'] or '').lower() == name_lower:
+                    punish_count += 1
+                # Count votes to punish
+                if row['votes']:
+                    try:
+                        votes_dict = json.loads(row['votes']) if isinstance(row['votes'], str) else row['votes']
+                    except (json.JSONDecodeError, TypeError):
+                        votes_dict = {}
+                    for voter_name, vote_val in votes_dict.items():
+                        if voter_name.lower() == name_lower and vote_val == 'punish':
+                            punish_vote_count += 1
+            result.append({
+                'attendance_count': attendance_count,
+                'pick_count': pick_count,
+                'punish_count': punish_count,
+                'punish_vote_count': punish_vote_count,
+                'attendance_pct': round(attendance_count / max(1, total) * 100, 1) if total else 0.0,
+                'pick_pct': round(pick_count / max(1, total) * 100, 1) if total else 0.0,
+                'adjusted_pick_pct': round(pick_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
+                'punish_pct': round(punish_count / max(1, pick_count) * 100, 1) if pick_count else 0.0,
+                'punish_vote_pct': round(punish_vote_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
+            })
+        return result, total
+
+    all_stats, total_sessions = compute_stats_for_rows(rows)
+    recent_stats, recent_total = compute_stats_for_rows(recent_rows)
+
+    # Attach names/ids to each stat entry
+    for i, watcher in enumerate(watchers):
+        all_stats[i]['id'] = watcher['id']
+        all_stats[i]['name'] = watcher['name']
+        recent_stats[i]['id'] = watcher['id']
+        recent_stats[i]['name'] = watcher['name']
 
     return jsonify({
-        'total_active_sessions': len(rows),
-        'watchers': stats,
+        'total_active_sessions': total_sessions,
+        'cutoff_date': cutoff,
+        'recent_total_sessions': recent_total,
+        'watchers': all_stats,
+        'recent_watchers': recent_stats,
     })
 
 
