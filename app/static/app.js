@@ -1129,16 +1129,9 @@ function spinWheel() {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
         // Decel Sharpness: exponent for the cubic ease (2 = gentle coast, 7 = hard brake)
-        const exp = 2 + spinSettings.decelSharpness * 5;
-        // Final Crawl: stretch the last portion of time so the wheel creeps slowly
-        let at = t;
-        if (spinSettings.finalCrawl > 0 && t > 0.75) {
-            const portion = 0.1 + spinSettings.finalCrawl * 0.15;
-            const localT = (t - (1 - portion)) / portion;
-            const stretch = 1 + spinSettings.finalCrawl * 8;
-            at = (1 - portion) + Math.pow(localT, stretch) * portion;
-        }
-        const eased = 1 - Math.pow(1 - at, exp);
+        // Final Crawl: adds to exponent — higher = wheel arrives sooner, crawls longer at end
+        const exp = 2 + spinSettings.decelSharpness * 5 + spinSettings.finalCrawl * 10;
+        const eased = 1 - Math.pow(1 - t, exp);
         wheelRotation = startRotation + (targetRotation - startRotation) * eased;
         drawWheel(wheelRotation);
         const currentSeg = getWinnerSegmentIndex();
