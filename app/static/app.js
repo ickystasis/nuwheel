@@ -1116,20 +1116,29 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    const extraRotations = 8 + Math.random() * 8;
+    // Duration: how many extra rotations (at 0.6 → ~14, at 12.0 → ~42)
+    const extraRotations = 12 + spinSettings.duration * 2.5;
     const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    const duration = 3000 + spinSettings.duration * 9500;
+    // Total time scales with rotations so more turns = longer spin
+    const duration = 2500 + extraRotations * 1500;
     const startTime = performance.now();
     const startRotation = wheelRotation;
 
     function animate(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
-        const baseEase = 1 - Math.pow(1 - t, 3 + spinSettings.decelSharpness * 2);
-        const finalWeight = Math.max(0, Math.min(1, (t - 0.65) / 0.35));
-        const finalEase = 1 - Math.pow(1 - finalWeight, 2 + (1 - spinSettings.finalCrawl) * 4);
-        const eased = Math.min(1, baseEase + finalEase * spinSettings.finalCrawl * 0.4);
+        // Decel Sharpness: exponent for the cubic ease (2 = gentle coast, 7 = hard brake)
+        const exp = 2 + spinSettings.decelSharpness * 5;
+        // Final Crawl: stretch the last portion of time so the wheel creeps slowly
+        let at = t;
+        if (spinSettings.finalCrawl > 0 && t > 0.75) {
+            const portion = 0.1 + spinSettings.finalCrawl * 0.15;
+            const localT = (t - (1 - portion)) / portion;
+            const stretch = 1 + spinSettings.finalCrawl * 8;
+            at = (1 - portion) + Math.pow(localT, stretch) * portion;
+        }
+        const eased = 1 - Math.pow(1 - at, exp);
         wheelRotation = startRotation + (targetRotation - startRotation) * eased;
         drawWheel(wheelRotation);
         const currentSeg = getWinnerSegmentIndex();
