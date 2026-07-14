@@ -168,10 +168,8 @@ const winnersList = document.getElementById('winnersList');
 const clearWinnersBtn = document.getElementById('clearWinnersBtn');
 const statsBtn = document.getElementById('statsBtn');
 const statsBody = document.getElementById('statsBody');
-const statsCutoffInfo = document.getElementById('statsCutoffInfo');
 
 // Debt matrix refs
-const debtMatrixBtn = document.getElementById('debtMatrixBtn');
 const debtMatrixModal = document.getElementById('debtMatrixModal');
 const debtMatrixCloseBtn = document.getElementById('debtMatrixCloseBtn');
 const debtMatrixTable = document.getElementById('debtMatrixTable');
@@ -1820,13 +1818,13 @@ function renderStatsTable(items, totalSessions) {
         <tr>
             <td><strong>${escHtml(item.name)}</strong></td>
             <td>${item.attendance_count}</td>
-            <td>${item.pick_count}</td>
-            <td>${item.punish_count}</td>
-            <td>${item.punish_vote_count}</td>
             <td><span class="stats-pill">${item.attendance_pct}%</span></td>
+            <td>${item.pick_count}</td>
             <td><span class="stats-pill" style="background:rgba(255,217,61,0.14);color:#ffd93d">${item.pick_pct}%</span></td>
             <td><span class="stats-pill" style="background:rgba(167,139,250,0.14);color:#a78bfa">${item.adjusted_pick_pct}%</span></td>
+            <td>${item.punish_count}</td>
             <td><span class="stats-pill" style="background:rgba(255,107,107,0.14);color:#ff6b6b">${item.punish_pct}%</span></td>
+            <td>${item.punish_vote_count}</td>
             <td>${item.punish_vote_pct}%</td>
         </tr>
     `).join('');
@@ -1838,13 +1836,13 @@ function renderStatsTable(items, totalSessions) {
                     <tr>
                         <th>Victim</th>
                         <th>Att.</th>
-                        <th>Picks</th>
-                        <th>Pun.</th>
-                        <th>⚖️Votes</th>
                         <th>Att.%</th>
+                        <th>Picks</th>
                         <th>Pick%</th>
                         <th>Adj.Pick%</th>
+                        <th>Pun.</th>
                         <th>Pun.%</th>
+                        <th>⚖️</th>
                         <th>VotePun%</th>
                     </tr>
                 </thead>
@@ -2019,9 +2017,7 @@ async function openDebtMatrix() {
         const [debtData, statsData] = await Promise.all([fetchDebtMatrix(), fetchStats()]);
         renderDebtMatrix(debtData);
         // Render stats
-        if (statsData.cutoff_date) {
-            statsCutoffInfo.textContent = `3-month cutoff: ${statsData.cutoff_date}`;
-        }
+        const cutoffLabel = statsData.cutoff_date ? ` (cutoff: ${statsData.cutoff_date})` : '';
         const allTimeHtml = renderStatsTable(statsData.watchers, statsData.total_active_sessions);
         const recentHtml = statsData.recent_watchers
             ? renderStatsTable(statsData.recent_watchers, statsData.recent_total_sessions)
@@ -2029,7 +2025,7 @@ async function openDebtMatrix() {
         statsBody.innerHTML = `
             <h4 style="color:#e0e0e0;margin:0 0 0.5rem">All Time</h4>
             ${allTimeHtml}
-            ${recentHtml ? `<hr style="border-color:#2a2a3e;margin:1rem 0"><h4 style="color:#e0e0e0;margin:0 0 0.5rem">Last 3 Months</h4>${recentHtml}` : ''}
+            ${recentHtml ? `<hr style="border-color:#2a2a3e;margin:1rem 0"><h4 style="color:#e0e0e0;margin:0 0 0.5rem">Last 3 Months${cutoffLabel}</h4>${recentHtml}` : ''}
         `;
         debtMatrixModal.classList.remove('hidden');
     } catch (e) {
@@ -2353,7 +2349,6 @@ winnersModal.addEventListener('click', (e) => {
     if (e.target === winnersModal) closeWinnersModal();
 });
 statsBtn.addEventListener('click', openStatsModal);
-debtMatrixBtn.addEventListener('click', openDebtMatrix);
 debtMatrixCloseBtn.addEventListener('click', closeDebtMatrix);
 debtMatrixModal.addEventListener('click', (e) => {
     if (e.target === debtMatrixModal) closeDebtMatrix();

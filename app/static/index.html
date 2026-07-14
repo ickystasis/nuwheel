@@ -16,7 +16,7 @@
                     <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
                     <button id="winnersBtn" class="btn btn-icon" title="Previous Winners">🏆</button>
                     <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
-                    <button id="debtMatrixBtn" class="btn btn-icon" title="Debt Matrix">💳</button>
+
                     <button id="adminBtn" class="btn btn-icon" title="Admin">🔧</button>
                     <button id="spinControlsBtn" class="btn btn-icon" title="Spin Settings">⚙️</button>
                     <label for="centerImageInput" class="btn btn-icon" title="Center Image" style="cursor:pointer">🖼️</label>
@@ -141,9 +141,6 @@
 
                 <div id="statsSection">
                     <h3 style="color:#ffd93d;margin:0 0 0.3rem;font-size:1rem">📊 Victim Stats</h3>
-                    <div style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem">
-                        <span id="statsCutoffInfo"></span>
-                    </div>
                     <div id="statsBody">
                         <p class="empty-msg" style="padding:1rem">Loading stats…</p>
                     </div>
@@ -249,7 +246,7 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
             color: #a78bfa;
             white-space: nowrap;
         }
-        .debt-matrix-content { width: auto !important; max-width: none !important; display: block !important; }
+        .debt-matrix-content { width: auto !important; max-width: none !important; display: block !important; max-height: none !important; }
         .debt-matrix-content .stats-table { width: 100%; min-width: 600px; }
         .debt-matrix-modal-body { overflow-y: auto; max-height: 90vh; }
         .debt-matrix-table { border-collapse: collapse; width: auto; font-size: 0.7rem; }

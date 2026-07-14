@@ -15,11 +15,12 @@
 
 ### Stats & Debt Matrix
 - Stats modal merged into debt matrix modal — single popup shows debt matrix on top, stats below
-- New stats columns: Pick %, Adjusted Pick % (win rate when on wheel), Punish %, Vote Punish % (how often they vote to punish)
-- 3-month cutoff stats: same stats computed for last 90 days with cutoff date displayed
+- New stats columns: Att.%, Pick%, Adj.Pick%, Pun.%, ⚖️ (punish votes), VotePun%
+- 3-month cutoff stats: same stats computed for last 90 days, cutoff date shown in the section header
 - Punish vote tracking: counts how many times each watcher voted to punish
-- Attendance counting now case-insensitive (fixes imported history not counting correctly)
-- Both 📊 and 💳 buttons open the same combined modal
+- Attendance counting now verifies via votes JSON (imported data no longer inflates attendance)
+- 💳 button removed, only 📊 opens the combined modal
+- Modal background now extends full height with scroll
 
 ### Winner History
 - All tooltips (victim panel + previous winners) increased by 30%

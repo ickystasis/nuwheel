@@ -645,27 +645,35 @@ def get_stats():
         for watcher in watchers:
             name = watcher['name']
             name_lower = name.lower()
+            wid = str(watcher['id'])
             attendance_count = 0
             pick_count = 0
             punish_count = 0
             punish_vote_count = 0
             for row in source_rows:
                 participants = [p.strip() for p in (row['participants'] or '').split(',') if p.strip()]
-                if name_lower in (p.lower() for p in participants):
+                # Parse votes
+                votes_dict = {}
+                if row['votes']:
+                    try:
+                        v = json.loads(row['votes']) if isinstance(row['votes'], str) else row['votes']
+                        if isinstance(v, dict):
+                            votes_dict = v
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                # Attendance: must be in participants AND (if votes exist) have a vote entry
+                in_participants = name_lower in (p.lower() for p in participants)
+                has_vote = name_lower in votes_dict or wid in votes_dict
+                if in_participants and (not votes_dict or has_vote):
                     attendance_count += 1
                 if (row['watcher_name'] or '').lower() == name_lower:
                     pick_count += 1
                 if row['judgement'] == 'punish' and (row['watcher_name'] or '').lower() == name_lower:
                     punish_count += 1
                 # Count votes to punish
-                if row['votes']:
-                    try:
-                        votes_dict = json.loads(row['votes']) if isinstance(row['votes'], str) else row['votes']
-                    except (json.JSONDecodeError, TypeError):
-                        votes_dict = {}
-                    for voter_name, vote_val in votes_dict.items():
-                        if voter_name.lower() == name_lower and vote_val == 'punish':
-                            punish_vote_count += 1
+                for voter_key, vote_val in votes_dict.items():
+                    if vote_val == 'punish' and (voter_key.lower() == name_lower or voter_key == wid):
+                        punish_vote_count += 1
             result.append({
                 'attendance_count': attendance_count,
                 'pick_count': pick_count,
