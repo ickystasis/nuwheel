@@ -1117,18 +1117,19 @@ function spinWheel() {
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
     // Pure physics: initial velocity + friction that fades with speed
-    const v0 = 150 + Math.random() * 150;         // 150-300 RPM initial
+    const v0 = (150 + Math.random() * 150) * (0.75 + Math.random() * 0.5);
     const v0_rad = v0 / 60 * 2 * Math.PI;          // convert to rad/s
     const k = 0.03 + Math.random() * 0.07;          // 0.03-0.10 friction coefficient
+    // Tiny constant friction so the wheel doesn't crawl forever at the very end
+    const c = 0.008 + Math.random() * 0.006;        // 0.008-0.014 rad/s² baseline brake
     let velocity = v0_rad;
     let prevTime = performance.now();
 
     function animate(now) {
         const dt = Math.min((now - prevTime) / 1000, 0.05);
         prevTime = now;
-        // Braking proportional to velocity: dv/dt = -k * v
-        // At 10% speed → 10% braking, at 1% speed → 1% braking
-        velocity -= k * velocity * dt;
+        // dv/dt = -(k*v + c): velocity-proportional fade + tiny constant finish
+        velocity -= (k * velocity + c) * dt;
         if (velocity < 0) velocity = 0;
         wheelRotation += velocity * dt;
         drawWheel(wheelRotation);

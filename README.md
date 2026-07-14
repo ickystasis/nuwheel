@@ -7,9 +7,9 @@ A chaotic multiplayer movie-picking game where watchers add titles to a spinning
 1. **Add Victims** — Create watchers, assign them movies with point weights on the wheel
 2. **Select Participants** — Choose who's in the session via the 👤 button
 3. **Spin** — The wheel picks a winner based on weighted odds
-4. **Vote** — Watchers vote 👍 Pass or 👎 Punish (proposer gets 1.1x tiebreaker)
+4. **Vote** — Watchers vote 👍 Pass or 👎 Punish (proposer gets 1.1x tiebreaker for punishes)
 5. **Pass** — Winner's streak resets to 0
-6. **Punish** — Winner incurs debt to every attendee (streak × points), making them less likely to win future spins as their effective points drop
+6. **Punish** — Winner incurs debt to every attendee (streak × 1), making them less likely to win future spins as their effective points drop (with a floor of 1 point victims can always contribute to the wheel)
 7. **Repeat** — Points are computed dynamically from the debt matrix
 
 ## Features
