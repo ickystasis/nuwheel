@@ -763,6 +763,10 @@ def process_win():
         return jsonify({'error': 'winner_id and participant_ids required'}), 400
 
     db = get_db(current_app)
+
+    # Record wheel weights for all participants BEFORE modifying any debts
+    _record_wheel_weights(db, participant_ids)
+
     placeholders = ','.join('?' * len(participant_ids))
 
     # Find debts owed TO the winner by current participants
@@ -815,9 +819,6 @@ def punish_movie():
 
     streak = winner['punish_streak']
     multiplier = streak + 1
-
-    # Record wheel weights for all participants before modifying debts
-    _record_wheel_weights(db, participant_ids)
 
     stolen_from = []
     total_theft = 0
@@ -925,9 +926,6 @@ def pass_movie():
     streak = winner['punish_streak']
     winner_record_id = data.get('winner_record_id')
     process_win_cleared = data.get('process_win_cleared', [])
-
-    # Record wheel weights for all participants before modifying debts
-    _record_wheel_weights(db, participant_ids)
 
     # Clear all debts involving the winner (both directions)
     returned_to = []
