@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## [1.7.0] - 2026-07-14
+
 ### Verdict Messages
 - Punish/pass/abort messages now persist on screen until the next spin (instead of auto-dismissing after 2-2.5s)
 - Punish message shows per-user breakdown: `2 added to David (5 total)`, one line per user
