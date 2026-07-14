@@ -13,6 +13,14 @@
 ### UI Safeguards
 - Watcher remove (✕) button hidden during spin, while winner is displayed, and during voting to prevent accidental removal mid-round
 
+### Wheel Physics
+- Complete rewrite of spin animation to pure physics simulation (`dv/dt = -(k·v + c)`)
+- Initial velocity: 150–300 RPM base with 75%–125% random multiplier (~113–375 RPM range)
+- Velocity-proportional friction (`k = 0.03–0.10`): braking fades with speed — fast at first, nearly zero at low speeds
+- Constant friction term (`c = 0.008–0.014 rad/s²`): ensures the wheel eventually stops instead of crawling forever
+- No time targets, no rotation counts, no easing curves — just spin until it naturally dies
+- Winner determined by `getWinnerSegmentIndex()` at the final resting position (not predetermined)
+
 ### Stats & Debt Matrix
 - Stats modal merged into debt matrix modal — single popup shows debt matrix on top, stats below
 - New stats columns: Att.%, Pick%, Adj.Pick%, Pun.%, ⚖️ (punish votes), VotePun%
