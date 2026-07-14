@@ -1116,12 +1116,12 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Duration: how many extra rotations (at 0.6 → ~14, at 12.0 → ~42)
-    const extraRotations = 12 + spinSettings.duration * 2.5;
+    // Big random range + duration contribution (at 0.6 → 23-43, at 12.0 → 80-100)
+    const extraRotations = 20 + Math.random() * 20 + spinSettings.duration * 5;
     const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    // Total time scales with rotations so more turns = longer spin
-    const duration = 2500 + extraRotations * 1500;
+    // Fast spin: ~2 revolutions per second
+    const duration = 2000 + extraRotations * 400;
     const startTime = performance.now();
     const startRotation = wheelRotation;
 
