@@ -1379,8 +1379,12 @@ async function renderVerdict() {
 
             await fetchData();
             renderAll();
+            const clearedLines = (processWinCleared || []).map(c => `${c.amount} returned to ${escHtml(c.debtor_name)}`).join('<br>');
             const stolenLines = (data.stolen_from || []).map(s => `${s.amount} added to ${escHtml(s.thief_name)} (${s.total_debt} total)`).join('<br>');
-            returnMsg.innerHTML = `👎 Punished! ${escHtml(seg.watcherName)} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)<br>${stolenLines}`;
+            let punishDetail = '';
+            if (clearedLines) punishDetail += `<br>${clearedLines}`;
+            if (stolenLines) punishDetail += `<br>${stolenLines}`;
+            returnMsg.innerHTML = `👎 Punished! ${escHtml(seg.watcherName)} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)${punishDetail}`;
         } else {
             // Execute pass logic
             const passRes = await fetch('/api/spin/pass', {
@@ -1934,7 +1938,7 @@ function renderDebtMatrix(data) {
                 val = getDebt(col.id, row.id);
                 cls = val > 0 ? 'cell-positive cell-editable' : 'cell-zero cell-editable';
             }
-            rowHtml += `<td class="${cls}" data-d="${col.id}" data-c="${row.id}" title="${escHtml(col.name)} owes ${escHtml(row.name)}">${val}</td>`;
+            rowHtml += `<td class="${cls}" data-d="${col.id}" data-c="${row.id}">${val}</td>`;
         }
         const pts = wheelPoints[row.id];
         const ptsColor = pts >= 1 ? '#6bcb77' : '#ff6b6b';
@@ -1956,6 +1960,34 @@ function renderDebtMatrix(data) {
             cell.style.width = maxW + 'px';
             cell.style.minWidth = maxW + 'px';
             cell.style.maxWidth = maxW + 'px';
+        });
+    });
+
+    // Tooltip for debt cells
+    const tooltip = document.getElementById('ptsTooltip');
+    tbody.querySelectorAll('td').forEach(td => {
+        const dId = td.dataset.d;
+        const cId = td.dataset.c;
+        if (!dId || !cId) return;
+        const debtor = watchers.find(w => w.id == dId);
+        const creditor = watchers.find(w => w.id == cId);
+        if (!debtor || !creditor) return;
+        const amount = getDebt(parseInt(dId), parseInt(cId));
+        td.addEventListener('mouseenter', () => {
+            if (td.querySelector('input')) return;
+            const html = amount > 0
+                ? `<span class="pos">+${amount}</span> from ${escHtml(debtor.name)} to ${escHtml(creditor.name)}`
+                : `<span style="color:#555">No debt</span>`;
+            tooltip.innerHTML = html;
+            tooltip.classList.remove('hidden');
+        });
+        td.addEventListener('mousemove', (e) => {
+            if (tooltip.classList.contains('hidden')) return;
+            tooltip.style.left = (e.clientX + 12) + 'px';
+            tooltip.style.top = (e.clientY - 10) + 'px';
+        });
+        td.addEventListener('mouseleave', () => {
+            tooltip.classList.add('hidden');
         });
     });
 
