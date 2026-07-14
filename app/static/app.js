@@ -1116,21 +1116,23 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Spin: fast start → medium brake → brake fade in last 20% for agonizing crawl
-    const rotations = 40 + Math.random() * 25;    // 40-65 total revs
+    // Spin: fast start → medium brake → progressive brake fade at end
+    // exp=4 gives: last 20% @ 16% brake, last 10% @ 4%, last 5% @ 1% of middle rate
+    const rotations = 45 + Math.random() * 25;    // 45-70 total revs
     const targetAngle = rotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    const duration = 40000 + Math.random() * 15000; // 40-55 seconds
+    const duration = 45000 + Math.random() * 15000; // 45-60 seconds
     const startTime = performance.now();
     const startRotation = wheelRotation;
-    // Higher exp > 2 means deceleration rate itself decreases toward the end
-    const exp = 3.0 + Math.random() * 1.5;          // 3.0-4.5
+    const exp = 4.0;
 
     function animate(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - t, exp);
         wheelRotation = startRotation + (targetRotation - startRotation) * eased;
+        // Never let the wheel go backwards
+        if (wheelRotation < startRotation) wheelRotation = startRotation;
         drawWheel(wheelRotation);
         const currentSeg = getWinnerSegmentIndex();
         if (currentSeg !== lastTickSegment) {
