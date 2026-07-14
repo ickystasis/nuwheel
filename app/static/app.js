@@ -1822,7 +1822,7 @@ function renderStatsTable(items, totalSessions) {
             <td>${item.pick_count}</td>
             <td><span class="stats-pill" style="background:rgba(255,217,61,0.14);color:#ffd93d">${item.pick_pct}%</span></td>
             <td><span class="stats-pill" style="background:rgba(167,139,250,0.14);color:#a78bfa">${item.adjusted_pick_pct}%</span></td>
-            <td>${item.avg_movie_weight || 6.0}</td>
+            <td>${item.avg_wheel_weight || 6.0}</td>
             <td>${item.punish_count}</td>
             <td><span class="stats-pill" style="background:rgba(255,107,107,0.14);color:#ff6b6b">${item.punish_pct}%</span></td>
             <td>${item.punish_vote_count}</td>

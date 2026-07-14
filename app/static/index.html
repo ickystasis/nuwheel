@@ -246,11 +246,12 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
             color: #a78bfa;
             white-space: nowrap;
         }
-        .debt-matrix-content { width: auto !important; max-width: none !important; display: block !important; max-height: none !important; }
+        .debt-matrix-content { display: block !important; max-height: none !important; }
         .debt-matrix-content .stats-table { width: 100%; min-width: 600px; }
-        .debt-matrix-modal-body { overflow-y: auto; max-height: 90vh; }
-        .debt-matrix-section { display: inline-block; border: 1px solid #2a2a3e; border-radius: 8px; padding: 0.5rem; background: #0f0f1a; }
-        .stats-section { border: 1px solid #2a2a3e; border-radius: 8px; padding: 1rem; background: #0f0f1a; overflow-x: auto; margin-top: 1rem; }
+        .debt-matrix-modal-body { display: flex; flex-direction: column; width: fit-content; max-width: 95vw; overflow-y: auto; max-height: 90vh; gap: 1rem; }
+        .debt-matrix-section { border: 1px solid #2a2a3e; border-radius: 8px; padding: 0.5rem; }
+        .stats-section { min-width: 100%; border: 1px solid #2a2a3e; border-radius: 8px; padding: 1rem; overflow-x: auto; }
+        .debt-matrix-table td.cell-diagonal { background: #0f0f1a; }
         .debt-matrix-table { border-collapse: collapse; width: auto; font-size: 0.7rem; }
         .debt-matrix-table th, .debt-matrix-table td { border: 1px solid #2a2a3e; padding: 0.15rem 0.3rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .debt-matrix-table th { background: #1a1a2e; color: #ffd93d; font-weight: 600; }

@@ -167,6 +167,15 @@ def init_db(app):
             db.execute('ALTER TABLE winners ADD COLUMN wheel_movies TEXT DEFAULT "{}"')
         except sqlite3.OperationalError:
             pass
+        # Migration: add avg_wheel_weight to watchers
+        try:
+            db.execute('ALTER TABLE watchers ADD COLUMN avg_wheel_weight REAL NOT NULL DEFAULT 6.0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE watchers ADD COLUMN weight_samples INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
         db.execute('''
             CREATE TABLE IF NOT EXISTS debts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

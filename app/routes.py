@@ -56,6 +56,20 @@ def _all_points(db, participant_ids=None):
     return {w['id']: _compute_points(db, w['id'], participant_ids) for w in watchers}
 
 
+def _record_wheel_weights(db, participant_ids):
+    """Update avg_wheel_weight for all participants based on current wheel state."""
+    for pid in participant_ids:
+        pts = _compute_points(db, pid, participant_ids)
+        row = db.execute('SELECT avg_wheel_weight, weight_samples FROM watchers WHERE id = ?', (pid,)).fetchone()
+        if not row:
+            continue
+        avg = row['avg_wheel_weight']
+        n = row['weight_samples']
+        new_avg = round((avg * n + pts) / (n + 1), 2)
+        db.execute('UPDATE watchers SET avg_wheel_weight = ?, weight_samples = ? WHERE id = ?',
+                   (new_avg, n + 1, pid))
+
+
 def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
     """Clamp title points to fit within the watcher's personal point budget."""
     watcher = db.execute('SELECT points FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
@@ -637,18 +651,7 @@ def get_stats():
     cutoff = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
     recent_rows = [r for r in rows if r['won_at'] and r['won_at'] >= cutoff]
 
-    watchers = db.execute('SELECT id, name FROM watchers ORDER BY created_at ASC').fetchall()
-
-    # Compute average movie weight per watcher from titles table
-    from collections import defaultdict
-    titles_rows = db.execute('SELECT watcher_id, points FROM titles').fetchall()
-    weight_sums = defaultdict(lambda: [0, 0])  # {watcher_id: [sum, count]}
-    for t in titles_rows:
-        weight_sums[t['watcher_id']][0] += t['points']
-        weight_sums[t['watcher_id']][1] += 1
-    avg_weights = {}
-    for wid, (total, cnt) in weight_sums.items():
-        avg_weights[wid] = round(total / cnt, 1) if cnt else 6.0
+    watchers = db.execute('SELECT id, name, avg_wheel_weight FROM watchers ORDER BY created_at ASC').fetchall()
 
     def compute_stats_for_rows(source_rows):
         total = len(source_rows)
@@ -690,7 +693,7 @@ def get_stats():
                 'pick_count': pick_count,
                 'punish_count': punish_count,
                 'punish_vote_count': punish_vote_count,
-                'avg_movie_weight': avg_weights.get(watcher['id'], 6.0),
+                'avg_wheel_weight': watcher['avg_wheel_weight'],
                 'attendance_pct': round(attendance_count / max(1, total) * 100, 1) if total else 0.0,
                 'pick_pct': round(pick_count / max(1, total) * 100, 1) if total else 0.0,
                 'adjusted_pick_pct': round(pick_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
@@ -813,6 +816,9 @@ def punish_movie():
     streak = winner['punish_streak']
     multiplier = streak + 1
 
+    # Record wheel weights for all participants before modifying debts
+    _record_wheel_weights(db, participant_ids)
+
     stolen_from = []
     total_theft = 0
 
@@ -919,6 +925,9 @@ def pass_movie():
     streak = winner['punish_streak']
     winner_record_id = data.get('winner_record_id')
     process_win_cleared = data.get('process_win_cleared', [])
+
+    # Record wheel weights for all participants before modifying debts
+    _record_wheel_weights(db, participant_ids)
 
     # Clear all debts involving the winner (both directions)
     returned_to = []
