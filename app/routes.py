@@ -1045,9 +1045,22 @@ def get_debts():
     db.commit()
 
     debts = db.execute('SELECT debtor_id, creditor_id, amount FROM debts').fetchall()
+    debt_list = []
+    for d in debts:
+        entry = {'debtor_id': d['debtor_id'], 'creditor_id': d['creditor_id'], 'amount': int(d['amount'])}
+        if d['amount'] > 0:
+            rows = db.execute(
+                'SELECT l.delta, l.remaining, l.winner_id, w.title_name, w.won_at '
+                'FROM debt_ledger l JOIN winners w ON l.winner_id = w.id '
+                'WHERE l.debtor_id = ? AND l.creditor_id = ? AND l.event_type = ? AND l.remaining > 0 '
+                'ORDER BY l.created_at ASC, l.id ASC',
+                (d['debtor_id'], d['creditor_id'], 'punish')
+            ).fetchall()
+            entry['entries'] = [{'title': r['title_name'], 'won_at': r['won_at'], 'delta': r['delta'], 'remaining': r['remaining']} for r in rows]
+        debt_list.append(entry)
     return jsonify({
         'watchers': [dict(w) for w in watchers],
-        'debts': [{'debtor_id': d['debtor_id'], 'creditor_id': d['creditor_id'], 'amount': int(d['amount'])} for d in debts],
+        'debts': debt_list,
     })
 
 

@@ -1891,12 +1891,19 @@ function renderDebtMatrix(data) {
 
     // Build lookup: (debtor_id, creditor_id) -> amount
     const debtMap = {};
+    const entriesMap = {};
     for (const d of debts) {
         debtMap[`${d.debtor_id},${d.creditor_id}`] = d.amount;
+        if (d.entries && d.entries.length > 0) {
+            entriesMap[`${d.debtor_id},${d.creditor_id}`] = d.entries;
+        }
     }
     function getDebt(dId, cId) {
         if (dId === cId) return 0;
         return debtMap[`${dId},${cId}`] || 0;
+    }
+    function getEntries(dId, cId) {
+        return entriesMap[`${dId},${cId}`] || [];
     }
 
     // Calculate effective points for each watcher: base 6 + owed to - owed by (all watchers)
@@ -1975,10 +1982,18 @@ function renderDebtMatrix(data) {
         const amount = getDebt(parseInt(dId), parseInt(cId));
         td.addEventListener('mouseenter', () => {
             if (td.querySelector('input')) return;
-            const html = amount > 0
-                ? `<span class="pos">+${amount}</span> from ${escHtml(debtor.name)} to ${escHtml(creditor.name)}`
-                : `<span style="color:#555">No debt</span>`;
-            tooltip.innerHTML = html;
+            const lines = [];
+            if (amount > 0) {
+                lines.push(`<span class="pos">+${amount}</span> from ${escHtml(debtor.name)}`);
+                const entries = getEntries(parseInt(dId), parseInt(cId));
+                for (const e of entries) {
+                    const dt = e.won_at ? e.won_at.slice(0, 10) : '';
+                    lines.push(`  <span style="color:#888;font-size:0.7rem">↳ +${e.delta} <span style="color:#aaa">${escHtml(e.title)}</span> ${dt}</span>`);
+                }
+            } else {
+                lines.push(`<span style="color:#555">No debt</span>`);
+            }
+            tooltip.innerHTML = lines.join('<br>');
             tooltip.classList.remove('hidden');
         });
         td.addEventListener('mousemove', (e) => {
