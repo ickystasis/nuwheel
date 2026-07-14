@@ -1116,20 +1116,18 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Big random range + duration contribution (at 0.6 → 23-43, at 12.0 → 80-100)
-    const extraRotations = 20 + Math.random() * 20 + spinSettings.duration * 5;
-    const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
+    // Target: ~60s total, ~120 RPM start, ~1 RPM last 10s, lots of RNG
+    const exp = 2.5 + Math.random() * 1.5 + spinSettings.decelSharpness * 2;
+    const rotations = 35 + Math.random() * 25;
+    const targetAngle = rotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    // Fast spin: ~2 revolutions per second
-    const duration = 2000 + extraRotations * 400;
+    const duration = 55000 + Math.random() * 15000 + spinSettings.finalCrawl * 20000;
     const startTime = performance.now();
     const startRotation = wheelRotation;
 
     function animate(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
-        // Decel Sharpness: exponent for the cubic ease (2 = gentle coast, 7 = hard brake)
-        const exp = 2 + spinSettings.decelSharpness * 5;
         const eased = 1 - Math.pow(1 - t, exp);
         wheelRotation = startRotation + (targetRotation - startRotation) * eased;
         drawWheel(wheelRotation);
