@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import os
 import random
 import re
@@ -53,6 +54,20 @@ def _all_points(db, participant_ids=None):
         participant_ids = [r['id'] for r in db.execute('SELECT id FROM watchers').fetchall()]
     watchers = db.execute('SELECT id FROM watchers').fetchall()
     return {w['id']: _compute_points(db, w['id'], participant_ids) for w in watchers}
+
+
+def _record_wheel_weights(db, participant_ids):
+    """Update avg_wheel_weight for all participants based on current wheel state."""
+    for pid in participant_ids:
+        pts = _compute_points(db, pid, participant_ids)
+        row = db.execute('SELECT avg_wheel_weight, weight_samples FROM watchers WHERE id = ?', (pid,)).fetchone()
+        if not row:
+            continue
+        avg = row['avg_wheel_weight']
+        n = row['weight_samples']
+        new_avg = round((avg * n + pts) / (n + 1), 2)
+        db.execute('UPDATE watchers SET avg_wheel_weight = ?, weight_samples = ? WHERE id = ?',
+                   (new_avg, n + 1, pid))
 
 
 def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
@@ -116,7 +131,15 @@ def get_data():
         except (ValueError, TypeError):
             participant_ids = all_ids
     else:
-        participant_ids = all_ids
+        stored = db.execute('SELECT value FROM app_settings WHERE key = ?', ('active_ids',)).fetchone()
+        if stored:
+            try:
+                participant_ids = json.loads(stored['value'])
+                participant_ids = [pid for pid in participant_ids if pid in all_ids]
+            except (json.JSONDecodeError, TypeError):
+                participant_ids = all_ids
+        else:
+            participant_ids = all_ids
     pts = _all_points(db, participant_ids)
     result = []
     name_map = {w['id']: w['name'] for w in watchers}
@@ -166,6 +189,44 @@ def get_data():
             'owed_by': [{'name': name_map[r['creditor_id']], 'amount': r['amount'], 'entries': _get_entries(w['id'], r['creditor_id'])} for r in owed_by_rows],
         })
     return jsonify(result)
+
+
+# ── Settings ──
+
+@bp.route('/settings', methods=['GET'])
+def get_settings():
+    db = get_db(current_app)
+    rows = db.execute('SELECT key, value FROM app_settings').fetchall()
+    settings = {}
+    for row in rows:
+        key = row['key']
+        val = row['value']
+        if key in ('spin_settings', 'active_ids'):
+            try:
+                settings[key] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                settings[key] = val
+        else:
+            settings[key] = val
+    return jsonify(settings)
+
+
+@bp.route('/settings', methods=['PUT'])
+def update_settings():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    db = get_db(current_app)
+    for key, val in data.items():
+        if val is None:
+            db.execute('DELETE FROM app_settings WHERE key = ?', (key,))
+        else:
+            str_val = val if isinstance(val, str) else json.dumps(val)
+            db.execute('''INSERT INTO app_settings (key, value) VALUES (?, ?)
+                          ON CONFLICT(key) DO UPDATE SET value = excluded.value''', (key, str_val))
+    db.commit()
+    socketio.emit('settings_updated', data)
+    return jsonify({'ok': True})
 
 
 # ── Watchers ──
@@ -580,42 +641,83 @@ def import_winners():
 @bp.route('/stats', methods=['GET'])
 def get_stats():
     """Return aggregate stats for active history entries."""
+    from datetime import datetime, timedelta
     db = get_db(current_app)
     rows = db.execute(
-        "SELECT id, title_name, watcher_name, weight, total_weight, participants, status, judgement, won_at "
+        "SELECT id, title_name, watcher_name, weight, total_weight, participants, status, judgement, votes, won_at "
         "FROM winners WHERE status != 'disabled' ORDER BY won_at DESC"
     ).fetchall()
 
-    watchers = db.execute('SELECT id, name FROM watchers ORDER BY created_at ASC').fetchall()
-    watcher_names = [w['name'] for w in watchers]
-    stats = []
-    for watcher in watchers:
-        name = watcher['name']
-        attendance_count = 0
-        pick_count = 0
-        punish_count = 0
-        for row in rows:
-            participants = [p.strip() for p in (row['participants'] or '').split(',') if p.strip()]
-            if name in participants:
-                attendance_count += 1
-            if row['watcher_name'] == name:
-                pick_count += 1
-            if row['judgement'] == 'punish' and row['watcher_name'] == name:
-                punish_count += 1
-        stats.append({
-            'id': watcher['id'],
-            'name': name,
-            'attendance_count': attendance_count,
-            'pick_count': pick_count,
-            'punish_count': punish_count,
-            'attendance_pct': round(attendance_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-            'pick_pct': round(pick_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-            'punish_pct': round(punish_count / max(1, len(rows)) * 100, 1) if rows else 0.0,
-        })
+    cutoff = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    recent_rows = [r for r in rows if r['won_at'] and r['won_at'] >= cutoff]
+
+    watchers = db.execute('SELECT id, name, avg_wheel_weight FROM watchers ORDER BY created_at ASC').fetchall()
+
+    def compute_stats_for_rows(source_rows):
+        total = len(source_rows)
+        result = []
+        for watcher in watchers:
+            name = watcher['name']
+            name_lower = name.lower()
+            wid = str(watcher['id'])
+            attendance_count = 0
+            pick_count = 0
+            punish_count = 0
+            punish_vote_count = 0
+            for row in source_rows:
+                participants = [p.strip() for p in (row['participants'] or '').split(',') if p.strip()]
+                # Parse votes
+                votes_dict = {}
+                if row['votes']:
+                    try:
+                        v = json.loads(row['votes']) if isinstance(row['votes'], str) else row['votes']
+                        if isinstance(v, dict):
+                            votes_dict = v
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                # Attendance: must be in participants AND (if votes exist) have a vote entry
+                in_participants = name_lower in (p.lower() for p in participants)
+                has_vote = name_lower in votes_dict or wid in votes_dict
+                if in_participants and (not votes_dict or has_vote):
+                    attendance_count += 1
+                if (row['watcher_name'] or '').lower() == name_lower:
+                    pick_count += 1
+                if row['judgement'] == 'punish' and (row['watcher_name'] or '').lower() == name_lower:
+                    punish_count += 1
+                # Count votes to punish
+                for voter_key, vote_val in votes_dict.items():
+                    if vote_val == 'punish' and (voter_key.lower() == name_lower or voter_key == wid):
+                        punish_vote_count += 1
+            result.append({
+                'attendance_count': attendance_count,
+                'pick_count': pick_count,
+                'punish_count': punish_count,
+                'punish_vote_count': punish_vote_count,
+                'avg_wheel_weight': watcher['avg_wheel_weight'],
+                'attendance_pct': round(attendance_count / max(1, total) * 100, 1) if total else 0.0,
+                'pick_pct': round(pick_count / max(1, total) * 100, 1) if total else 0.0,
+                'adjusted_pick_pct': round(pick_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
+                'punish_pct': round(punish_count / max(1, pick_count) * 100, 1) if pick_count else 0.0,
+                'punish_vote_pct': round(punish_vote_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
+            })
+        return result, total
+
+    all_stats, total_sessions = compute_stats_for_rows(rows)
+    recent_stats, recent_total = compute_stats_for_rows(recent_rows)
+
+    # Attach names/ids to each stat entry
+    for i, watcher in enumerate(watchers):
+        all_stats[i]['id'] = watcher['id']
+        all_stats[i]['name'] = watcher['name']
+        recent_stats[i]['id'] = watcher['id']
+        recent_stats[i]['name'] = watcher['name']
 
     return jsonify({
-        'total_active_sessions': len(rows),
-        'watchers': stats,
+        'total_active_sessions': total_sessions,
+        'cutoff_date': cutoff,
+        'recent_total_sessions': recent_total,
+        'watchers': all_stats,
+        'recent_watchers': recent_stats,
     })
 
 
@@ -661,6 +763,10 @@ def process_win():
         return jsonify({'error': 'winner_id and participant_ids required'}), 400
 
     db = get_db(current_app)
+
+    # Record wheel weights for all participants BEFORE modifying any debts
+    _record_wheel_weights(db, participant_ids)
+
     placeholders = ','.join('?' * len(participant_ids))
 
     # Find debts owed TO the winner by current participants
@@ -730,9 +836,11 @@ def punish_movie():
             'SELECT id, amount FROM debts WHERE debtor_id = ? AND creditor_id = ?',
             (winner_id, pid)
         ).fetchone()
+        prev_debt = existing['amount'] if existing else 0
+        new_total = prev_debt + multiplier
         if existing:
-            db.execute('UPDATE debts SET amount = amount + ? WHERE debtor_id = ? AND creditor_id = ?',
-                       (multiplier, winner_id, pid))
+            db.execute('UPDATE debts SET amount = ? WHERE debtor_id = ? AND creditor_id = ?',
+                       (new_total, winner_id, pid))
         else:
             db.execute('INSERT INTO debts (debtor_id, creditor_id, amount) VALUES (?, ?, ?)',
                        (winner_id, pid, multiplier))
@@ -749,6 +857,7 @@ def punish_movie():
             'thief_name': participant['name'],
             'thief_id': pid,
             'amount': multiplier,
+            'total_debt': new_total,
         })
         total_theft += multiplier
 
@@ -797,7 +906,7 @@ def abort_session():
 
 @bp.route('/spin/pass', methods=['POST'])
 def pass_movie():
-    """Reset the watcher's punish streak to 0."""
+    """Reset the watcher's punish streak to 0 and clear all debts the winner owes."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'Request body required'}), 400
@@ -806,12 +915,76 @@ def pass_movie():
     if not winner_id:
         return jsonify({'error': 'winner_id required'}), 400
 
+    participant_ids = data.get('participant_ids', [])
+
     db = get_db(current_app)
+
+    winner = db.execute('SELECT id, name, punish_streak FROM watchers WHERE id = ?', (winner_id,)).fetchone()
+    if not winner:
+        return jsonify({'error': 'Winner not found'}), 404
+
+    streak = winner['punish_streak']
+    winner_record_id = data.get('winner_record_id')
+    process_win_cleared = data.get('process_win_cleared', [])
+
+    # Clear all debts involving the winner (both directions)
+    returned_to = []
+    points_saved = 0
+    # Include debts already cleared by process-win
+    for item in process_win_cleared:
+        returned_to.append({'name': item.get('debtor_name', '?'), 'amount': item.get('amount', 0), 'total_debt': 0})
+        points_saved += item.get('amount', 0)
+
+    if participant_ids:
+        placeholders = ','.join('?' * len(participant_ids))
+        # Debts the winner owes to others (winner is debtor)
+        debts_owed = db.execute(
+            f'SELECT creditor_id, amount FROM debts WHERE debtor_id = ? AND creditor_id IN ({placeholders}) AND amount != 0',
+            [winner_id] + participant_ids
+        ).fetchall()
+        # Debts others owe to the winner (winner is creditor)
+        debts_owed_to = db.execute(
+            f'SELECT debtor_id, amount FROM debts WHERE creditor_id = ? AND debtor_id IN ({placeholders}) AND amount != 0',
+            [winner_id] + participant_ids
+        ).fetchall()
+        for d in debts_owed:
+            creditor = db.execute('SELECT name FROM watchers WHERE id = ?', (d['creditor_id'],)).fetchone()
+            if creditor:
+                returned_to.append({'name': creditor['name'], 'amount': d['amount'], 'total_debt': 0})
+                points_saved += d['amount']
+            db.execute(
+                'UPDATE debts SET amount = 0 WHERE debtor_id = ? AND creditor_id = ?',
+                (winner_id, d['creditor_id'])
+            )
+            if winner_record_id:
+                db.execute(
+                    'INSERT INTO debt_ledger (debtor_id, creditor_id, delta, remaining, winner_id, event_type) '
+                    'VALUES (?, ?, ?, 0, ?, ?)',
+                    (winner_id, d['creditor_id'], -d['amount'], winner_record_id, 'refund')
+                )
+                _consume_debt_entries(db, winner_id, d['creditor_id'], d['amount'])
+        for d in debts_owed_to:
+            debtor = db.execute('SELECT name FROM watchers WHERE id = ?', (d['debtor_id'],)).fetchone()
+            if debtor:
+                returned_to.append({'name': debtor['name'], 'amount': d['amount'], 'total_debt': 0})
+                points_saved += d['amount']
+            db.execute(
+                'UPDATE debts SET amount = 0 WHERE debtor_id = ? AND creditor_id = ?',
+                (d['debtor_id'], winner_id)
+            )
+            if winner_record_id:
+                db.execute(
+                    'INSERT INTO debt_ledger (debtor_id, creditor_id, delta, remaining, winner_id, event_type) '
+                    'VALUES (?, ?, ?, 0, ?, ?)',
+                    (d['debtor_id'], winner_id, -d['amount'], winner_record_id, 'refund')
+                )
+                _consume_debt_entries(db, d['debtor_id'], winner_id, d['amount'])
+
     db.execute('UPDATE watchers SET punish_streak = 0 WHERE id = ?', (winner_id,))
     db.commit()
     socketio.emit('data_changed', {})
 
-    return jsonify({'ok': True, 'winner_id': winner_id})
+    return jsonify({'ok': True, 'winner_id': winner_id, 'streak': streak, 'points_saved': points_saved, 'returned_to': returned_to})
 
 
 # ── Admin ──
@@ -872,9 +1045,22 @@ def get_debts():
     db.commit()
 
     debts = db.execute('SELECT debtor_id, creditor_id, amount FROM debts').fetchall()
+    debt_list = []
+    for d in debts:
+        entry = {'debtor_id': d['debtor_id'], 'creditor_id': d['creditor_id'], 'amount': int(d['amount'])}
+        if d['amount'] > 0:
+            rows = db.execute(
+                'SELECT l.delta, l.remaining, l.winner_id, w.title_name, w.won_at '
+                'FROM debt_ledger l JOIN winners w ON l.winner_id = w.id '
+                'WHERE l.debtor_id = ? AND l.creditor_id = ? AND l.event_type = ? AND l.remaining > 0 '
+                'ORDER BY l.created_at ASC, l.id ASC',
+                (d['debtor_id'], d['creditor_id'], 'punish')
+            ).fetchall()
+            entry['entries'] = [{'title': r['title_name'], 'won_at': r['won_at'], 'delta': r['delta'], 'remaining': r['remaining']} for r in rows]
+        debt_list.append(entry)
     return jsonify({
         'watchers': [dict(w) for w in watchers],
-        'debts': [{'debtor_id': d['debtor_id'], 'creditor_id': d['creditor_id'], 'amount': int(d['amount'])} for d in debts],
+        'debts': debt_list,
     })
 
 

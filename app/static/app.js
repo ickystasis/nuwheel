@@ -9,6 +9,8 @@ let segments = [];
 let isSpinning = false;
 let wheelRotation = 0;
 let animFrameId = null;
+let idleAnimFrameId = null;
+const IDLE_SPEED = 0.003;
 let lastTickSegment = -1;
 let tickAudioCtx = null;
 function playTick() {
@@ -80,22 +82,61 @@ function playCheer() {
         cheerAudio.play();
     } catch (e) {}
 }
+function startIdleSpin() {
+    if (idleAnimFrameId) cancelAnimationFrame(idleAnimFrameId);
+    function idleAnimate() {
+        wheelRotation += IDLE_SPEED;
+        drawWheel(wheelRotation);
+        idleAnimFrameId = requestAnimationFrame(idleAnimate);
+    }
+    idleAnimFrameId = requestAnimationFrame(idleAnimate);
+}
+
+function stopIdleSpin() {
+    if (idleAnimFrameId) {
+        cancelAnimationFrame(idleAnimFrameId);
+        idleAnimFrameId = null;
+    }
+}
+
 let watcherVotes = {};   // {watcherId: 'pass'|'punish'}
 let showVoting = false;  // whether vote toggles + verdict btn are active
 
-// ---- localStorage helpers ----
-function saveActiveIds() {
-    localStorage.setItem('wheelActiveIds', JSON.stringify([...activeIds]));
+// ---- Server-side settings persistence ----
+async function saveSettings(data) {
+    try {
+        await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+    } catch (e) { /* ignore */ }
 }
 
-function loadActiveIds() {
+async function fetchSettings() {
     try {
-        const saved = localStorage.getItem('wheelActiveIds');
-        if (saved) {
-            const arr = JSON.parse(saved);
-            if (Array.isArray(arr)) activeIds = new Set(arr);
+        const res = await fetch('/api/settings');
+        const settings = await res.json();
+        if (settings.active_ids && Array.isArray(settings.active_ids)) {
+            activeIds = new Set(settings.active_ids);
         }
-    } catch (e) { /* ignore corrupt data */ }
+        if (settings.spin_settings) {
+            spinSettings.duration = settings.spin_settings.duration ?? spinSettings.duration;
+            spinSettings.decelSharpness = settings.spin_settings.decelSharpness ?? spinSettings.decelSharpness;
+            spinSettings.finalCrawl = settings.spin_settings.finalCrawl ?? spinSettings.finalCrawl;
+            if (velocitySlider) velocitySlider.value = spinSettings.duration;
+            if (velocityValue) velocityValue.textContent = spinSettings.duration.toFixed(2);
+            if (frictionGainSlider) frictionGainSlider.value = spinSettings.decelSharpness;
+            if (frictionGainValue) frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
+            if (finalStretchSlider) finalStretchSlider.value = spinSettings.finalCrawl;
+            if (finalStretchValue) finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+        }
+        if (settings.center_image) {
+            const img = new Image();
+            img.onload = () => { centerImage = img; drawWheel(wheelRotation); };
+            img.src = settings.center_image;
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // ---- DOM refs ----
@@ -126,12 +167,9 @@ const modalCloseBtn = document.getElementById('modalCloseBtn');
 const winnersList = document.getElementById('winnersList');
 const clearWinnersBtn = document.getElementById('clearWinnersBtn');
 const statsBtn = document.getElementById('statsBtn');
-const statsModal = document.getElementById('statsModal');
-const statsCloseBtn = document.getElementById('statsCloseBtn');
 const statsBody = document.getElementById('statsBody');
 
 // Debt matrix refs
-const debtMatrixBtn = document.getElementById('debtMatrixBtn');
 const debtMatrixModal = document.getElementById('debtMatrixModal');
 const debtMatrixCloseBtn = document.getElementById('debtMatrixCloseBtn');
 const debtMatrixTable = document.getElementById('debtMatrixTable');
@@ -254,18 +292,17 @@ const SEGMENT_COLORS = [
     '#E8DAEF', '#A9CCE3', '#D5DBDB', '#F9E79F', '#ABEBC6',
 ];
 
-const cx = canvas.width / 2;
-const cy = canvas.height / 2;
-const radius = canvas.width / 2 - 10;
+let cx = canvas.width / 2 || 600;
+let cy = canvas.height / 2 || 600;
+let radius = (canvas.width / 2 || 600) - 10;
+let CENTER_R = 280;
 
 // ============================================================
 //  API
 // ============================================================
 
 async function fetchData() {
-    const ids = [...activeIds].join(',');
-    const url = ids ? '/api/data?active_ids=' + encodeURIComponent(ids) : '/api/data';
-    const res = await fetch(url);
+    const res = await fetch('/api/data');
     allWatchers = await res.json();
 }
 
@@ -424,7 +461,7 @@ function renderParticipantList() {
         cb.addEventListener('change', async () => {
             if (cb.checked) activeIds.add(w.id);
             else activeIds.delete(w.id);
-            saveActiveIds();
+            await saveSettings({ active_ids: [...activeIds] });
             await fetchData();
             renderAll();
         });
@@ -510,7 +547,12 @@ function renderWatchers() {
     }
 
     emptyMsg.style.display = 'none';
-    spinBtn.disabled = segments.length === 0;
+    spinBtn.disabled = showVoting || segments.length === 0;
+
+    // Hide Accept button during voting (in case renderAll was called)
+    if (showVoting) {
+        spinBtn.classList.add('faded');
+    }
 
     for (const w of active) {
         const card = document.createElement('div');
@@ -525,13 +567,14 @@ function renderWatchers() {
         delBtn.className = 'watcher-del-btn';
         delBtn.textContent = '✕';
         delBtn.title = 'Remove from session';
-        delBtn.addEventListener('click', () => {
+        delBtn.addEventListener('click', async () => {
             activeIds.delete(w.id);
-            saveActiveIds();
+            await saveSettings({ active_ids: [...activeIds] });
             computeSegments();
             renderAll();
         });
         rightDiv.appendChild(delBtn);
+        delBtn.classList.toggle('hidden', showVoting || isSpinning || lastWinnerInfo);
 
         const assignedWeight = w.titles.reduce((sum, t) => sum + (parseFloat(t.points) || 0), 0);
         const pointsMatch = Math.abs(assignedWeight - w.points) < 0.0001;
@@ -740,7 +783,7 @@ function createTitleRow(watcher, title, index) {
                     drawWheel(wheelRotation);
                     updateWheelInfo();
                     if (shouldRefresh) refreshWatchersPreservingFocus();
-                    spinBtn.disabled = segments.length === 0;
+                    if (!showVoting) spinBtn.disabled = segments.length === 0;
                 } catch (e) {}
             } else if (name) {
                 // New title — create on backend directly
@@ -759,7 +802,7 @@ function createTitleRow(watcher, title, index) {
                     drawWheel(wheelRotation);
                     updateWheelInfo();
                     if (shouldRefresh) refreshWatchersPreservingFocus();
-                    spinBtn.disabled = segments.length === 0;
+                    if (!showVoting) spinBtn.disabled = segments.length === 0;
                 } catch (e) {}
             }
         } finally {
@@ -844,13 +887,15 @@ function drawWheel(rotation) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const count = segments.length;
+    const wheelSize = parseInt(canvas.style.width) || (canvas.width / (window.devicePixelRatio || 1));
+
     if (count === 0) {
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.fillStyle = '#1a1a2e';
         ctx.fill();
         ctx.strokeStyle = '#2a2a3e';
-        ctx.lineWidth = 12;
+        ctx.lineWidth = Math.max(1, Math.floor(radius / 160));
         ctx.stroke();
         ctx.fillStyle = '#555';
         ctx.font = '60px sans-serif';
@@ -863,7 +908,7 @@ function drawWheel(rotation) {
     const totalPts = getTotalWeight();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius + Math.max(2, Math.floor(wheelSize / 160)), 0, Math.PI * 2);
     ctx.fillStyle = '#2a2a3e';
     ctx.fill();
 
@@ -881,7 +926,7 @@ function drawWheel(rotation) {
         ctx.fill();
 
         ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 7;
+        ctx.lineWidth = Math.max(1, Math.floor(wheelSize / 320));
         ctx.stroke();
 
         ctx.save();
@@ -913,26 +958,17 @@ function drawWheel(rotation) {
                 }
             }
             if (currentLine) lines.push(currentLine);
-            if (lines.length > 2) {
-                while (lines.length > 2) {
-                    const lastLine = lines.pop();
-                    const prevLine = lines[lines.length - 1];
-                    const combined = prevLine + ' ' + (lastLine || '');
-                    if (ctx.measureText(combined).width <= maxTextWidth) {
-                        lines[lines.length - 1] = combined;
-                    } else {
-                        lines[lines.length - 1] = prevLine.slice(0, -2) + '…';
-                    }
-                }
-            }
             return lines;
         }
 
-        let fontSize = 80;
+        let fontSize = Math.floor(wheelSize * 0.049);
         let lines = wrapText(fontSize);
-        while (fontSize > 12 && lines.length > 2) {
+        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > maxTextWidth))) {
             fontSize -= 4;
             lines = wrapText(fontSize);
+        }
+        if (lines.length > 2) {
+            lines = [lines.slice(0, -1).join(' ') + '…', lines[lines.length - 1]];
         }
 
         const lineHeight = fontSize * 1.2;
@@ -957,7 +993,7 @@ function drawWheel(rotation) {
     }
 
     // Center circle — clickable SPIN button
-    const centerR = 440;
+    const centerR = CENTER_R;
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
@@ -966,20 +1002,34 @@ function drawWheel(rotation) {
     ctx.fillStyle = '#2a2a3e';
     ctx.fill();
     if (centerImage) {
-        ctx.drawImage(centerImage, cx - centerR, cy - centerR, centerR * 2, centerR * 2);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation);
+        ctx.drawImage(centerImage, -centerR, -centerR, centerR * 2, centerR * 2);
+        ctx.restore();
     }
     ctx.restore();
     ctx.beginPath();
     ctx.arc(cx, cy, centerR, 0, Math.PI * 2);
     ctx.strokeStyle = '#3a3a52';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = Math.max(1, Math.floor(wheelSize / 280));
     ctx.stroke();
     if (!centerImage) {
-        ctx.fillStyle = '#ffd93d';
-        ctx.font = 'bold 44px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('SPIN', cx, cy);
+        if (showVoting) {
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⚖️ VOTING', cx, cy);
+        } else if (lastWinnerInfo) {
+            // Never show SPIN when a winner is pending
+        } else {
+            ctx.fillStyle = '#ffd93d';
+            ctx.font = 'bold 44px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('SPIN', cx, cy);
+        }
     }
 }
 
@@ -1019,7 +1069,20 @@ function getWinnerSegmentIndex() {
 // ============================================================
 
 function spinWheel() {
-    if (isSpinning || segments.length < 1) return;
+    if (showVoting) {
+        returnMsg.textContent = '⚖️ Voting in progress — accept or abort first';
+        returnMsg.style.color = '#ff6b6b';
+        returnMsg.classList.remove('hidden');
+        return;
+    }
+    if (lastWinnerInfo) return;
+    if (isSpinning) return;
+    if (segments.length < 1) {
+        returnMsg.textContent = '📭 No segments to spin';
+        returnMsg.style.color = '#ff6b6b';
+        returnMsg.classList.remove('hidden');
+        return;
+    }
 
     // Budget validation (uses computed points with floor of 1)
     const active = getActiveWatchers();
@@ -1035,6 +1098,7 @@ function spinWheel() {
         return;
     }
 
+    stopIdleSpin();
     isSpinning = true;
     if (shuffleBtn) shuffleBtn.classList.add('hidden');
     lastTickSegment = -1;
@@ -1050,33 +1114,33 @@ function spinWheel() {
     lastWinnerInfo = null;
     // Reset message color
     returnMsg.style.color = '';
+    document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    const extraRotations = 8 + Math.random() * 8;
-    const targetAngle = extraRotations * Math.PI * 2 + Math.random() * Math.PI * 2;
-    const targetRotation = wheelRotation + targetAngle;
-    const duration = 3000 + spinSettings.duration * 9500;
-    const startTime = performance.now();
-    const startRotation = wheelRotation;
+    // Pure physics: initial velocity + friction that fades with speed
+    const v0 = (150 + Math.random() * 150) * (0.75 + Math.random() * 0.5);
+    const v0_rad = v0 / 60 * 2 * Math.PI;          // convert to rad/s
+    const k = 0.03 + Math.random() * 0.07;          // 0.03-0.10 friction coefficient
+    // Tiny constant friction so the wheel doesn't crawl forever at the very end
+    const c = 0.008 + Math.random() * 0.006;        // 0.008-0.014 rad/s² baseline brake
+    let velocity = v0_rad;
+    let prevTime = performance.now();
 
     function animate(now) {
-        const elapsed = now - startTime;
-        const t = Math.min(elapsed / duration, 1);
-        const baseEase = 1 - Math.pow(1 - t, 3 + spinSettings.decelSharpness * 2);
-        const finalWeight = Math.max(0, Math.min(1, (t - 0.65) / 0.35));
-        const finalEase = 1 - Math.pow(1 - finalWeight, 2 + (1 - spinSettings.finalCrawl) * 4);
-        const eased = Math.min(1, baseEase + finalEase * spinSettings.finalCrawl * 0.4);
-        wheelRotation = startRotation + (targetRotation - startRotation) * eased;
+        const dt = Math.min((now - prevTime) / 1000, 0.05);
+        prevTime = now;
+        // dv/dt = -(k*v + c): velocity-proportional fade + tiny constant finish
+        velocity -= (k * velocity + c) * dt;
+        if (velocity < 0) velocity = 0;
+        wheelRotation += velocity * dt;
         drawWheel(wheelRotation);
         const currentSeg = getWinnerSegmentIndex();
         if (currentSeg !== lastTickSegment) {
             lastTickSegment = currentSeg;
             playTick();
         }
-        if (t < 1) {
+        if (velocity > 0.003) {
             animFrameId = requestAnimationFrame(animate);
         } else {
-            wheelRotation = targetRotation;
-            drawWheel(wheelRotation);
             onSpinComplete();
         }
     }
@@ -1092,7 +1156,7 @@ function onSpinComplete() {
         const seg = segments[idx];
         const totalPts = getTotalWeight();
         winnerText.textContent = `🏆 ${seg.name} 🏆`;
-        winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} — by ${seg.watcherName}`;
+        winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} (${Math.round(seg.points / totalPts * 100)}%) — by ${seg.watcherName}`;
         winnerDisplay.classList.remove('hidden');
         fireConfetti();
 
@@ -1122,6 +1186,13 @@ function onSpinComplete() {
 
 async function acceptResults() {
     if (!lastWinnerInfo) return;
+
+    // Lock spinning immediately — before any async work
+    showVoting = true;
+    isSpinning = true;
+    spinBtn.classList.add('faded');
+    spinBtn.disabled = true;
+
     const seg = lastWinnerInfo.seg;
     const active = getActiveWatchers();
     const participantNames = active.map(w => w.name).join(', ');
@@ -1148,6 +1219,7 @@ async function acceptResults() {
             totalPts: lastWinnerInfo.totalPts,
             participantIds: participantIds,
             participantNames: participantNames,
+            wheelRotation: wheelRotation,
         }));
         fetchWinners();
     }
@@ -1156,7 +1228,6 @@ async function acceptResults() {
     renderAll();
 
     // Activate voting mode: show vote toggles + Render Verdict + Abort buttons
-    showVoting = true;
     const activeWatchers = getActiveWatchers();
     watcherVotes = {};
     for (const w of activeWatchers) {
@@ -1167,10 +1238,6 @@ async function acceptResults() {
     verdictBtn.disabled = false;
     abortBtn.classList.remove('faded');
     abortBtn.disabled = false;
-
-    // Hide Accept button
-    spinBtn.classList.add('faded');
-    spinBtn.disabled = true;
 }
 
 // ============================================================
@@ -1213,17 +1280,17 @@ async function abortSession() {
     setTimeout(() => {
         showVoting = false;
         watcherVotes = {};
+        isSpinning = false;
+        lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
         renderAll();
+        startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
-        spinBtn.classList.remove('faded');
-        spinBtn.disabled = false;
-        returnMsg.classList.add('hidden');
-        isSpinning = false;
-        lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
+        spinBtn.classList.add('faded');
+        spinBtn.disabled = true;
     }, 2000);
 }
 
@@ -1257,6 +1324,8 @@ async function renderVerdict() {
 
     verdictBtn.classList.add('faded');
     verdictBtn.disabled = true;
+    abortBtn.classList.add('faded');
+    abortBtn.disabled = true;
     returnMsg.classList.add('hidden');
 
     const winnerData = allWatchers.find(w => w.name === seg.watcherName);
@@ -1281,14 +1350,17 @@ async function renderVerdict() {
         }
 
         // Refund: clear debts owed to the winner (moved from acceptResults)
+        let processWinCleared = [];
         if (winnerData && active.length > 1) {
             const refundIds = active.map(w => w.id);
             try {
-                await fetch('/api/spin/process-win', {
+                const pwRes = await fetch('/api/spin/process-win', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ winner_id: winnerData.id, participant_ids: refundIds, winner_record_id: lastWinnerInfo.winnerId }),
                 });
+                const pwData = await pwRes.json();
+                processWinCleared = pwData.cleared || [];
             } catch { /* ignore */ }
         }
 
@@ -1306,17 +1378,31 @@ async function renderVerdict() {
 
             await fetchData();
             renderAll();
-            returnMsg.textContent = `👎 Punished! ${seg.watcherName} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)`;
+            const clearedLines = (processWinCleared || []).map(c => `${c.amount} returned to ${escHtml(c.debtor_name)}`).join('<br>');
+            const stolenLines = (data.stolen_from || []).map(s => `${s.amount} added to ${escHtml(s.thief_name)} (${s.total_debt} total)`).join('<br>');
+            let punishDetail = '';
+            if (clearedLines) punishDetail += `<br>${clearedLines}`;
+            if (stolenLines) punishDetail += `<br>${stolenLines}`;
+            returnMsg.innerHTML = `👎 Punished! ${escHtml(seg.watcherName)} owes ${data.total_theft} point${data.total_theft !== 1 ? 's' : ''} (🔥x${data.multiplier} streak!)${punishDetail}`;
         } else {
             // Execute pass logic
-            await fetch('/api/spin/pass', {
+            const passRes = await fetch('/api/spin/pass', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ winner_id: winnerData.id }),
+                body: JSON.stringify({ winner_id: winnerData.id, participant_ids: active.map(w => w.id), winner_record_id: lastWinnerInfo.winnerId, process_win_cleared: processWinCleared }),
             });
+            const passData = await passRes.json();
             await fetchData();
             renderAll();
-            returnMsg.textContent = `👍 Passed! ${seg.watcherName}'s streak reset to 0.`;
+            const pts = passData.points_saved || 0;
+            const returnedItems = passData.returned_to || [];
+            const streakMsg = passData.streak > 0 ? ` ${escHtml(seg.watcherName)}'s streak reset to 0` : '';
+            let ptsMsg = '';
+            if (returnedItems.length > 0) {
+                const returnedLines = returnedItems.map(r => `${r.amount} returned to ${escHtml(r.name)}`).join('<br>');
+                ptsMsg = ` (${pts} point${pts !== 1 ? 's' : ''} returned)<br>${returnedLines}`;
+            }
+            returnMsg.innerHTML = `👍 Passed!${streakMsg}${ptsMsg}`;
         }
         returnMsg.classList.remove('hidden');
     } catch (e) {
@@ -1328,15 +1414,15 @@ async function renderVerdict() {
     setTimeout(() => {
         showVoting = false;
         watcherVotes = {};
+        isSpinning = false;
+        lastWinnerInfo = null;
+        localStorage.removeItem('incompleteWinner');
         renderAll();
+        startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
-        returnMsg.classList.add('hidden');
-        isSpinning = false;
-        lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
     }, 2500);
 }
 
@@ -1394,8 +1480,18 @@ document.head.appendChild(styleSheet);
 // ============================================================
 
 function computeSegments() {
-    // Segments come from the API pre-sorted by display_order (server-shuffled)
+    const oldKeys = segments.map(s => `${s.name}|${s.watcherName}`);
     segments = getActiveSegments();
+    // Preserve the existing order when segment identities haven't changed.
+    // Order only resets when tiles are added/removed or shuffleWheel() is called.
+    if (segments.length === oldKeys.length && segments.length > 0) {
+        const orderMap = new Map(oldKeys.map((k, i) => [k, i]));
+        segments.sort((a, b) => {
+            const ka = `${a.name}|${a.watcherName}`;
+            const kb = `${b.name}|${b.watcherName}`;
+            return (orderMap.get(ka) ?? Infinity) - (orderMap.get(kb) ?? Infinity);
+        });
+    }
 }
 
 // ============================================================
@@ -1407,7 +1503,7 @@ function renderAll() {
     renderWatchers();
     drawWheel(wheelRotation);
     if (shuffleBtn) {
-        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0);
+        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0 || showVoting);
     }
 }
 
@@ -1473,58 +1569,19 @@ function renderWinnersList() {
         titleRow.style.cssText = 'display:flex;align-items:center;gap:0.4rem;';
 
         const judgeBtn = document.createElement('span');
-        judgeBtn.style.cssText = 'font-size:1.1rem;';
+        judgeBtn.style.cssText = 'font-size:1.1rem;cursor:default;';
         if (w.judgement === 'aborted') {
             judgeBtn.textContent = '🚫';
             judgeBtn.title = 'Aborted';
         } else if (w.judgement === 'punish') {
             judgeBtn.textContent = '👎';
-            judgeBtn.title = 'Punish — click to toggle';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'pass';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'Punished';
         } else if (w.judgement === 'pass') {
             judgeBtn.textContent = '👍';
-            judgeBtn.title = 'Pass — click to toggle';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'punish';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'Passed';
         } else {
             judgeBtn.textContent = '❓';
-            judgeBtn.title = 'No verdict — click to set';
-            judgeBtn.style.cursor = 'pointer';
-            judgeBtn.addEventListener('click', async () => {
-                const next = 'punish';
-                try {
-                    await fetch(`/api/winners/${w.id}/judgement`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ judgement: next }),
-                    });
-                    w.judgement = next;
-                    renderWinnersList();
-                } catch (e) { alert(e.message); }
-            });
+            judgeBtn.title = 'No verdict';
         }
         titleRow.appendChild(judgeBtn);
 
@@ -1549,16 +1606,40 @@ function renderWinnersList() {
         metaRow.style.cssText = 'display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;';
 
         const maxW = parseFloat(w.total_weight) || 0;
-        const weightStr = maxW > 0 ? `${w.weight}/${maxW}` : `${w.weight}/NA`;
+        const weightStr = maxW > 0 ? `${w.weight}/${maxW} (${Math.round(w.weight / maxW * 100)}%)` : `${w.weight}/NA`;
         const weightSpan = document.createElement('span');
         weightSpan.textContent = `W:${weightStr}`;
         metaRow.appendChild(weightSpan);
 
         metaRow.appendChild(document.createTextNode(' by '));
         const propName = w.watcher_name;
+
+        // Parse votes & wheel_movies early so proposer pill can show their actual vote
+        let votesData = {};
+        if (w.votes && w.votes !== '{}') {
+            try { votesData = JSON.parse(w.votes); } catch (e) {}
+        }
+        let spinMovies = {};
+        try { spinMovies = JSON.parse(w.wheel_movies || '{}'); } catch (e) {}
+
+        // Resolve proposer's watcher ID (handles renames — stored name ≠ current name)
+        const propWatcher = allWatchers.find(x => x.name === propName);
+        const propIdStr = propWatcher ? String(propWatcher.id) : null;
+        const propDispName = propWatcher ? propWatcher.name : propName;
+
+        // Look up proposer's actual vote by ID first, fall back to case-insensitive name match
+        const propVote = (propIdStr && votesData[propIdStr] !== undefined)
+            ? votesData[propIdStr]
+            : Object.entries(votesData).find(([k]) => k.toLowerCase() === propName.toLowerCase())?.[1] || 'na';
+        let propEmoji, propClass;
+        if (w.judgement === 'aborted') { propEmoji = '🚫'; propClass = 'vote-chip-aborted'; }
+        else if (propVote === 'punish') { propEmoji = '👎'; propClass = 'vote-chip-punish'; }
+        else if (propVote === 'na') { propEmoji = '🤷'; propClass = 'vote-chip-na'; }
+        else { propEmoji = '👍'; propClass = 'vote-chip-pass'; }
         const propSpan = document.createElement('span');
-        propSpan.textContent = propName;
-        propSpan.style.cssText = 'cursor:help;border-bottom:1px dotted rgba(255,255,255,0.25);';
+        propSpan.className = `vote-chip ${propClass}`;
+        propSpan.textContent = `${propEmoji} ${propDispName}`;
+        propSpan.style.cssText = 'cursor:help;';
         metaRow.appendChild(propSpan);
 
         let d;
@@ -1584,32 +1665,67 @@ function renderWinnersList() {
 
         left.appendChild(metaRow);
 
-        // Parse wheel_movies for tooltips
-        let spinMovies = {};
-        try { spinMovies = JSON.parse(w.wheel_movies || '{}'); } catch (e) {}
-
-        // Replace proposer tooltip with per-spin movies
+        // Replace proposer tooltip with per-spin movies (shared floating tooltip)
         const propMovieList = spinMovies[propName] || [];
         if (propMovieList.length > 0) {
-            const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`);
-            propSpan.title = `This spin's movies:\n${tooltipLines.join('\n')}`;
+            const tooltipLines = propMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+            const tooltip = document.getElementById('winnersTooltip');
+            const html = `<span style="color:#ffd93d">${propDispName}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
+            const modalContent = document.querySelector('#winnersModal .modal-content');
+            propSpan.addEventListener('mouseenter', (e) => {
+                tooltip.innerHTML = html;
+                tooltip.classList.remove('hidden');
+                const rect = modalContent.getBoundingClientRect();
+                tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+            });
+            propSpan.addEventListener('mousemove', (e) => {
+                const rect = modalContent.getBoundingClientRect();
+                tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+            });
+            propSpan.addEventListener('mouseleave', () => {
+                tooltip.classList.add('hidden');
+            });
         }
 
         // Per-watcher votes row — static text with hover
         const voteChips = document.createElement('div');
         voteChips.style.cssText = 'display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap;font-size:0.8rem;';
-        let votesData = {};
-        if (w.votes && w.votes !== '{}') {
-            try { votesData = JSON.parse(w.votes); } catch (e) {}
-        }
-        // For aborted entries, show attendance from participants field
+        // For aborted entries, show attendance from participants field as individual chips
         if (w.judgement === 'aborted') {
             const names = (w.participants || '').split(',').map(s => s.trim()).filter(Boolean);
             if (names.length > 0) {
-                const attendLabel = document.createElement('span');
-                attendLabel.style.cssText = 'font-size:0.75rem;color:#888;';
-                attendLabel.textContent = `👥 Attended: ${names.join(', ')}`;
-                voteChips.appendChild(attendLabel);
+                for (const pName of names) {
+                    if (pName.toLowerCase() === propName.toLowerCase()) continue;
+                    const chip = document.createElement('span');
+                    chip.className = 'vote-chip vote-chip-aborted';
+                    chip.textContent = `🚫 ${pName}`;
+                    chip.style.cssText = 'cursor:default;';
+                    const voterMovieList = spinMovies[pName] || [];
+                    if (voterMovieList.length > 0) {
+                        const tooltipLines = voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+                        const tooltip = document.getElementById('winnersTooltip');
+                        const html = `<span style="color:#ffd93d">${pName}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
+                        const modalContent = document.querySelector('#winnersModal .modal-content');
+                        chip.addEventListener('mouseenter', (e) => {
+                            tooltip.innerHTML = html;
+                            tooltip.classList.remove('hidden');
+                            const rect = modalContent.getBoundingClientRect();
+                            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                            tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                        });
+                        chip.addEventListener('mousemove', (e) => {
+                            const rect = modalContent.getBoundingClientRect();
+                            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                            tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                        });
+                        chip.addEventListener('mouseleave', () => {
+                            tooltip.classList.add('hidden');
+                        });
+                    }
+                    voteChips.appendChild(chip);
+                }
             } else {
                 const noAttend = document.createElement('span');
                 noAttend.style.cssText = 'font-size:0.75rem;color:#666;font-style:italic;';
@@ -1618,9 +1734,11 @@ function renderWinnersList() {
             }
         } else {
             for (const [key, vote] of Object.entries(votesData)) {
+                // Skip proposer — their vote is shown after "by"
+                if (key === propIdStr || key.toLowerCase() === propName.toLowerCase()) continue;
                 const name = /^\d+$/.test(key)
                     ? (allWatchers.find(x => x.id == key)?.name || `User #${key}`)
-                    : key;
+                    : (allWatchers.find(x => x.name.toLowerCase() === key.toLowerCase())?.name || key);
                 const chip = document.createElement('span');
                 if (vote === 'punish') {
                     chip.className = 'vote-chip vote-chip-punish';
@@ -1633,10 +1751,28 @@ function renderWinnersList() {
                     chip.textContent = `👍 ${name}`;
                 }
                 chip.style.cssText = 'cursor:default;';
-                // Per-spin movie tooltip
+                // Per-spin movie tooltip (shared floating tooltip)
                 const voterMovieList = spinMovies[name] || [];
                 if (voterMovieList.length > 0) {
-                    chip.title = `Movies in this spin:\n${voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''})`).join('\n')}`;
+                    const tooltipLines = voterMovieList.map(m => `${m.name} (${m.weight}pt${m.weight !== 1 ? 's' : ''}${maxW > 0 ? ' - ' + Math.round(m.weight / maxW * 100) + '%' : ''})`);
+                    const tooltip = document.getElementById('winnersTooltip');
+                    const html = `<span style="color:#ffd93d">${name}'s movies this spin:</span><br>${tooltipLines.join('<br>')}`;
+                    const modalContent = document.querySelector('#winnersModal .modal-content');
+                    chip.addEventListener('mouseenter', (e) => {
+                        tooltip.innerHTML = html;
+                        tooltip.classList.remove('hidden');
+                        const rect = modalContent.getBoundingClientRect();
+                        tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                    });
+                    chip.addEventListener('mousemove', (e) => {
+                        const rect = modalContent.getBoundingClientRect();
+                        tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+                    });
+                    chip.addEventListener('mouseleave', () => {
+                        tooltip.classList.add('hidden');
+                    });
                 }
                 voteChips.appendChild(chip);
             }
@@ -1679,49 +1815,54 @@ function closeWinnersModal() {
     winnersModal.classList.add('hidden');
 }
 
-async function openStatsModal() {
-    statsModal.classList.remove('hidden');
-    statsBody.innerHTML = '<p class="empty-msg">Loading stats…</p>';
-    try {
-        const data = await fetchStats();
-        if (!data.watchers || data.watchers.length === 0) {
-            statsBody.innerHTML = '<p class="empty-msg">No active sessions yet.</p>';
-            return;
-        }
-
-        const rows = data.watchers.map(item => `
-            <tr>
-                <td>${escHtml(item.name)}</td>
-                <td>${item.attendance_count}</td>
-                <td>${item.pick_count}</td>
-                <td>${item.punish_count}</td>
-                <td><span class="stats-pill">${item.attendance_pct.toFixed(1)}%</span></td>
-            </tr>
-        `).join('');
-
-        statsBody.innerHTML = `
-            <div class="winner-entry-meta" style="margin-bottom:0.75rem">Active sessions: ${data.total_active_sessions}</div>
+function renderStatsTable(items, totalSessions) {
+    if (!items || items.length === 0) return '<p class="empty-msg">No stats yet.</p>';
+    const rowCells = items.map(item => `
+        <tr>
+            <td><strong>${escHtml(item.name)}</strong></td>
+            <td>${item.attendance_count}</td>
+            <td><span class="stats-pill">${item.attendance_pct}%</span></td>
+            <td>${item.pick_count}</td>
+            <td><span class="stats-pill" style="background:rgba(255,217,61,0.14);color:#ffd93d">${item.pick_pct}%</span></td>
+            <td><span class="stats-pill" style="background:rgba(167,139,250,0.14);color:#a78bfa">${item.adjusted_pick_pct}%</span></td>
+            <td>${item.avg_wheel_weight || 6.0}</td>
+            <td>${item.punish_count}</td>
+            <td><span class="stats-pill" style="background:rgba(255,107,107,0.14);color:#ff6b6b">${item.punish_pct}%</span></td>
+            <td>${item.punish_vote_count}</td>
+            <td>${item.punish_vote_pct}%</td>
+        </tr>
+    `).join('');
+    return `
+        <div style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem">Sessions: ${totalSessions}</div>
+        <div style="overflow-x:auto">
             <table class="stats-table">
                 <thead>
                     <tr>
                         <th>Victim</th>
-                        <th>Attendance</th>
+                        <th>Att.</th>
+                        <th>Att.%</th>
                         <th>Picks</th>
-                        <th>Punishes</th>
-                        <th>Share</th>
+                        <th>Pick%</th>
+                        <th>Adj.Pick%</th>
+                        <th>AvgWt</th>
+                        <th>Pun.</th>
+                        <th>Pun.%</th>
+                        <th>⚖️</th>
+                        <th>VotePun%</th>
                     </tr>
                 </thead>
-                <tbody>${rows}</tbody>
+                <tbody>${rowCells}</tbody>
             </table>
-        `;
-    } catch (e) {
-        statsBody.innerHTML = '<p class="empty-msg">Could not load stats right now.</p>';
-    }
+        </div>
+    `;
 }
 
-function closeStatsModal() {
-    statsModal.classList.add('hidden');
+async function openStatsModal() {
+    // Open the combined debt matrix modal
+    await openDebtMatrix();
 }
+
+function closeStatsModal() {}
 
 // ============================================================
 //  Debt Matrix
@@ -1749,12 +1890,19 @@ function renderDebtMatrix(data) {
 
     // Build lookup: (debtor_id, creditor_id) -> amount
     const debtMap = {};
+    const entriesMap = {};
     for (const d of debts) {
         debtMap[`${d.debtor_id},${d.creditor_id}`] = d.amount;
+        if (d.entries && d.entries.length > 0) {
+            entriesMap[`${d.debtor_id},${d.creditor_id}`] = d.entries;
+        }
     }
     function getDebt(dId, cId) {
         if (dId === cId) return 0;
         return debtMap[`${dId},${cId}`] || 0;
+    }
+    function getEntries(dId, cId) {
+        return entriesMap[`${dId},${cId}`] || [];
     }
 
     // Calculate effective points for each watcher: base 6 + owed to - owed by (all watchers)
@@ -1796,7 +1944,7 @@ function renderDebtMatrix(data) {
                 val = getDebt(col.id, row.id);
                 cls = val > 0 ? 'cell-positive cell-editable' : 'cell-zero cell-editable';
             }
-            rowHtml += `<td class="${cls}" data-d="${col.id}" data-c="${row.id}" title="${escHtml(col.name)} owes ${escHtml(row.name)}">${val}</td>`;
+            rowHtml += `<td class="${cls}" data-d="${col.id}" data-c="${row.id}">${val}</td>`;
         }
         const pts = wheelPoints[row.id];
         const ptsColor = pts >= 1 ? '#6bcb77' : '#ff6b6b';
@@ -1818,6 +1966,42 @@ function renderDebtMatrix(data) {
             cell.style.width = maxW + 'px';
             cell.style.minWidth = maxW + 'px';
             cell.style.maxWidth = maxW + 'px';
+        });
+    });
+
+    // Tooltip for debt cells
+    const tooltip = document.getElementById('ptsTooltip');
+    tbody.querySelectorAll('td').forEach(td => {
+        const dId = td.dataset.d;
+        const cId = td.dataset.c;
+        if (!dId || !cId) return;
+        const debtor = watchers.find(w => w.id == dId);
+        const creditor = watchers.find(w => w.id == cId);
+        if (!debtor || !creditor) return;
+        const amount = getDebt(parseInt(dId), parseInt(cId));
+        td.addEventListener('mouseenter', () => {
+            if (td.querySelector('input')) return;
+            const lines = [];
+            if (amount > 0) {
+                lines.push(`<span class="pos">+${amount}</span> from ${escHtml(debtor.name)}`);
+                const entries = getEntries(parseInt(dId), parseInt(cId));
+                for (const e of entries) {
+                    const dt = e.won_at ? e.won_at.slice(0, 10) : '';
+                    lines.push(`  <span style="color:#888;font-size:0.7rem">↳ +${e.delta} <span style="color:#aaa">${escHtml(e.title)}</span> ${dt}</span>`);
+                }
+            } else {
+                lines.push(`<span style="color:#555">No debt</span>`);
+            }
+            tooltip.innerHTML = lines.join('<br>');
+            tooltip.classList.remove('hidden');
+        });
+        td.addEventListener('mousemove', (e) => {
+            if (tooltip.classList.contains('hidden')) return;
+            tooltip.style.left = (e.clientX + 12) + 'px';
+            tooltip.style.top = (e.clientY - 10) + 'px';
+        });
+        td.addEventListener('mouseleave', () => {
+            tooltip.classList.add('hidden');
         });
     });
 
@@ -1878,11 +2062,23 @@ async function saveDebtCell(td, inp) {
 
 async function openDebtMatrix() {
     try {
-        const data = await fetchDebtMatrix();
-        renderDebtMatrix(data);
+        const [debtData, statsData] = await Promise.all([fetchDebtMatrix(), fetchStats()]);
+        renderDebtMatrix(debtData);
+        // Render stats
+        const cutoffLabel = statsData.cutoff_date ? statsData.cutoff_date : '';
+        const cutoffSub = cutoffLabel ? `<div style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem">Cutoff date: ${cutoffLabel}</div>` : '';
+        const allTimeHtml = renderStatsTable(statsData.watchers, statsData.total_active_sessions);
+        const recentHtml = statsData.recent_watchers
+            ? renderStatsTable(statsData.recent_watchers, statsData.recent_total_sessions)
+            : '';
+        statsBody.innerHTML = `
+            <h4 style="color:#e0e0e0;margin:0 0 0.5rem">All Time</h4>
+            ${allTimeHtml}
+            ${recentHtml ? `<hr style="border-color:#2a2a3e;margin:1rem 0"><h4 style="color:#e0e0e0;margin:0 0 0.5rem">Last 3 Months</h4>${cutoffSub}${recentHtml}` : ''}
+        `;
         debtMatrixModal.classList.remove('hidden');
     } catch (e) {
-        alert('Failed to load debt matrix: ' + e.message);
+        alert('Failed to load data: ' + e.message);
     }
 }
 
@@ -1981,18 +2177,20 @@ async function recordRetroVote() {
     retroVotes = {};
 }
 
-// Image upload for center button
+// Image upload for center button (persisted server-side)
 document.getElementById('centerImageInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const img = new Image();
     const reader = new FileReader();
     reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
         img.onload = () => {
             centerImage = img;
             drawWheel(wheelRotation);
+            saveSettings({ center_image: dataUrl });
         };
-        img.src = ev.target.result;
+        img.src = dataUrl;
     };
     reader.readAsDataURL(file);
 });
@@ -2006,8 +2204,8 @@ participantsCloseBtn.addEventListener('click', closeParticipantsModal);
 participantsModal.addEventListener('click', (e) => {
     if (e.target === participantsModal) closeParticipantsModal();
 });
-startMovieNightBtn.addEventListener('click', () => {
-    saveActiveIds();
+startMovieNightBtn.addEventListener('click', async () => {
+    await saveSettings({ active_ids: [...activeIds] });
     closeParticipantsModal();
     renderAll();
 });
@@ -2021,17 +2219,24 @@ spinSettingsCloseBtn.addEventListener('click', () => {
 spinSettingsModal.addEventListener('click', (e) => {
     if (e.target === spinSettingsModal) spinSettingsModal.classList.add('hidden');
 });
+function saveSpinSettings() {
+    saveSettings({ spin_settings: { ...spinSettings } });
+}
+
 velocitySlider.addEventListener('input', () => {
     spinSettings.duration = parseFloat(velocitySlider.value);
     velocityValue.textContent = spinSettings.duration.toFixed(2);
+    saveSpinSettings();
 });
 frictionGainSlider.addEventListener('input', () => {
     spinSettings.decelSharpness = parseFloat(frictionGainSlider.value);
     frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
+    saveSpinSettings();
 });
 finalStretchSlider.addEventListener('input', () => {
     spinSettings.finalCrawl = parseFloat(finalStretchSlider.value);
     finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+    saveSpinSettings();
 });
 bypassChecksInput.addEventListener('change', () => {
     bypassPointChecks = bypassChecksInput.checked;
@@ -2124,7 +2329,8 @@ function renderAdminWatchers() {
                     if (!res.ok) { alert('Failed to reset streak'); return; }
                     await fetchData();
                     renderAdminWatchers();
-                    renderAll();
+    renderAll();
+    resizeWheel();
                 } catch (e) { alert(e.message); }
             });
             row.appendChild(resetStreakBtn);
@@ -2170,7 +2376,7 @@ adminAddBtn.addEventListener('click', async () => {
     try {
         const w = await addWatcher(name, adminColorInput.value);
         activeIds.add(w.id);
-        saveActiveIds();
+        await saveSettings({ active_ids: [...activeIds] });
         adminNewName.value = '';
         adminColorInput.value = '#4ECDC4';
         renderAdminWatchers();
@@ -2192,11 +2398,6 @@ winnersModal.addEventListener('click', (e) => {
     if (e.target === winnersModal) closeWinnersModal();
 });
 statsBtn.addEventListener('click', openStatsModal);
-statsCloseBtn.addEventListener('click', closeStatsModal);
-statsModal.addEventListener('click', (e) => {
-    if (e.target === statsModal) closeStatsModal();
-});
-debtMatrixBtn.addEventListener('click', openDebtMatrix);
 debtMatrixCloseBtn.addEventListener('click', closeDebtMatrix);
 debtMatrixModal.addEventListener('click', (e) => {
     if (e.target === debtMatrixModal) closeDebtMatrix();
@@ -2295,8 +2496,10 @@ socket.on('data_changed', () => {
 socket.on('spin_completed', (data) => {
     // Don't override if we're mid-spin ourselves
     if (isSpinning) return;
-    // Don't override if Accept is showing (local spinner already handled this)
+    // Don't override if local spinner already handled this (Accept button visible)
     if (!spinBtn.classList.contains('faded')) return;
+    // Don't override if we're in voting mode
+    if (showVoting) return;
 
     // All clients have the same segment order (DB display_order), so the same
     // final angle lands on the same slice for everyone.
@@ -2311,6 +2514,7 @@ socket.on('spin_completed', (data) => {
     const startTime = performance.now();
     const startRotation = wheelRotation;
     isSpinning = true;
+    document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
     function animate(now) {
         const elapsed = now - startTime;
@@ -2329,7 +2533,7 @@ socket.on('spin_completed', (data) => {
                 const seg = segments[idx];
                 const totalPts = getTotalWeight();
                 winnerText.textContent = `\uD83C\uDFC6 ${seg.name} \uD83C\uDFC6`;
-                winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} - by ${seg.watcherName}`;
+                winnerDetails.textContent = `Weight: ${seg.points}/${totalPts} (${Math.round(seg.points / totalPts * 100)}%) - by ${seg.watcherName}`;
                 winnerDisplay.classList.remove('hidden');
                 fireConfetti();
             }
@@ -2350,9 +2554,7 @@ socket.on('winners_changed', () => {
 });
 
 // Canvas: center circle click → SPIN
-const CENTER_R = 440;
 canvas.addEventListener('click', (e) => {
-    if (isSpinning) return;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -2366,15 +2568,17 @@ canvas.addEventListener('mousemove', (e) => {
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
     const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-    canvas.style.cursor = (dist <= CENTER_R && !isSpinning) ? 'pointer' : 'default';
+    canvas.style.cursor = (dist <= CENTER_R && !isSpinning && !showVoting && !lastWinnerInfo) ? 'pointer' : 'default';
 });
 
 (async function init() {
-    loadActiveIds();
+    await fetchSettings();
     await fetchMediaLists();
     await fetchData();
     await fetchWinners();
     renderAll();
+    startIdleSpin();
+    requestAnimationFrame(() => requestAnimationFrame(resizeWheel));
 
     // Recover incomplete spin state
     try {
@@ -2383,12 +2587,18 @@ canvas.addEventListener('mousemove', (e) => {
             const info = JSON.parse(raw);
             const winnerRecord = winners.find(x => x.id == info.winnerRecordId);
             if (winnerRecord && !winnerRecord.judgement) {
+                stopIdleSpin();
                 lastWinnerInfo = {
                     seg: { name: info.titleName, watcherName: info.watcherName, points: info.points },
                     totalPts: info.totalPts,
                     winnerId: info.winnerRecordId,
                 };
+                if (info.wheelRotation !== undefined) {
+                    wheelRotation = info.wheelRotation;
+                    drawWheel(wheelRotation);
+                }
                 showVoting = true;
+                isSpinning = true;
                 watcherVotes = {};
                 for (const pid of info.participantIds) {
                     const w = allWatchers.find(x => x.id == pid);
@@ -2399,12 +2609,42 @@ canvas.addEventListener('mousemove', (e) => {
                 abortBtn.classList.remove('faded');
                 abortBtn.disabled = false;
                 winnerText.textContent = `🏆 ${info.titleName} 🏆`;
-                winnerDetails.textContent = `Weight: ${info.points}/${info.totalPts} — by ${info.watcherName}`;
+                winnerDetails.textContent = `Weight: ${info.points}/${info.totalPts} (${Math.round(info.points / info.totalPts * 100)}%) — by ${info.watcherName}`;
                 winnerDisplay.classList.remove('hidden');
                 spinBtn.classList.add('faded');
                 spinBtn.disabled = true;
+                if (shuffleBtn) shuffleBtn.classList.add('hidden');
                 renderWatchers();
             }
         }
     } catch (e) { /* ignore corrupt recovery data */ }
 })();
+
+// ============================================================
+//  Wheel Resize — dynamic canvas sizing
+// ============================================================
+
+function resizeWheel() {
+    const panel = document.querySelector('.wheel-panel');
+    const wrapper = document.querySelector('.wheel-wrapper');
+
+    const panelRect = panel.getBoundingClientRect();
+    const otherHeight = 0;
+    const availableHeight = panelRect.height - otherHeight - 30;
+    const availableWidth = panelRect.width - 30;
+    let size = Math.floor(Math.min(availableWidth, availableHeight, 1600));
+    size = Math.max(size, 200);
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(size * dpr);
+    canvas.height = Math.floor(size * dpr);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    cx = canvas.width / 2;
+    cy = canvas.height / 2;
+    radius = canvas.width / 2 - 10 * dpr;
+    CENTER_R = Math.floor(size * 0.196 * dpr);
+    drawWheel(wheelRotation);
+}
+
+window.addEventListener('resize', () => requestAnimationFrame(resizeWheel));

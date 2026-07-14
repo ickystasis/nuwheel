@@ -8,53 +8,38 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <header>
-            <h1>🎡 Wheel of Doom<sup>(b)</sup></h1>
-        </header>
-
-        <!-- Top Buttons -->
-        <div class="add-section">
-            <button id="addWatcherBtn" class="btn btn-add">👤 Select Victims</button>
-            <button id="winnersBtn" class="btn btn-winners">🏆 Previous Winners</button>
-            <button id="statsBtn" class="btn btn-admin">📊 Stats</button>
-            <button id="debtMatrixBtn" class="btn btn-admin">💳 Debt Matrix</button>
-            <button id="adminBtn" class="btn btn-admin">🔧 Admin</button>
-            <button id="spinControlsBtn" class="btn btn-admin">⚙️ Spin Settings</button>
-            <label for="centerImageInput" class="btn btn-admin" style="cursor:pointer">🖼️ Center Image</label>
-            <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
-        </div>
-
         <!-- Main Layout -->
         <div class="main-layout">
-            <!-- Watchers Panel -->
-            <div class="list-panel" id="watchersPanel">
-                <div class="watcher-panel-header">
-                    <h2>Victims</h2>
-                    <label class="main-bypass">
-                        <input type="checkbox" id="bypassChecks" />
-                        Bypass point assignment checks when spinning
-                    </label>
+            <!-- Left Column -->
+            <div class="left-column">
+                <div class="add-section">
+                    <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
+                    <button id="winnersBtn" class="btn btn-icon" title="Previous Winners">🏆</button>
+                    <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
+
+                    <button id="adminBtn" class="btn btn-icon" title="Admin">🔧</button>
+                    <button id="spinControlsBtn" class="btn btn-icon" title="Spin Settings">⚙️</button>
+                    <label for="centerImageInput" class="btn btn-icon" title="Center Image" style="cursor:pointer">🖼️</label>
+                    <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
                 </div>
-                <div id="watchersContainer"></div>
-                <p id="emptyMsg" class="empty-msg">No Victims yet! Click "Select Victims" above. ✨</p>
+                <div class="list-panel" id="watchersPanel">
+                    <div class="watcher-panel-header">
+                        <h2>Victims</h2>
+                        <label class="main-bypass">
+                            <input type="checkbox" id="bypassChecks" />
+                            Point Override
+                        </label>
+                    </div>
+                    <div id="watchersContainer"></div>
+                    <p id="emptyMsg" class="empty-msg">No Victims yet! ✨</p>
+                </div>
             </div>
 
             <!-- Wheel Panel -->
             <div class="wheel-panel">
                 <div class="wheel-wrapper">
                     <div class="pointer">▼</div>
-                    <canvas id="wheelCanvas" width="2250" height="2250"></canvas>
-                </div>
-                <div class="wheel-info" id="wheelInfo">
-                    <span id="totalWeight">Total weight: 0</span>
-                </div>
-
-                <div class="action-row" id="actionRow">
-                    <button id="shuffleBtn" class="btn btn-shuffle">🔀 Shuffle Wheel</button>
-                    <button id="abortBtn" class="btn btn-abort action-btn faded" disabled>🚫 Abort Session</button>
-                    <button id="verdictBtn" class="btn btn-verdict action-btn faded" disabled>⚖️ Render Verdict</button>
-                    <button id="spinBtn" class="btn btn-accept action-btn faded" disabled>✓ Accept ✓</button>
+                    <canvas id="wheelCanvas" width="1000" height="1000"></canvas>
                 </div>
 
                 <!-- Spin Settings Modal -->
@@ -80,12 +65,25 @@
                         </div>
                     </div>
                 </div>
-                <div id="returnMsg" class="return-msg hidden"></div>
+            </div>
 
-                <!-- Winner Display -->
-                <div id="winnerDisplay" class="winner-display hidden">
-                    <div id="winnerText" class="winner-text"></div>
-                    <div id="winnerDetails" class="winner-details"></div>
+            <!-- Side Panel -->
+            <div class="side-panel" id="sidePanel">
+                <div class="wheel-info" id="wheelInfo">
+                    <span id="totalWeight">Total weight: 0</span>
+                </div>
+                <div class="action-group">
+                    <div class="action-row" id="actionRow">
+                        <button id="shuffleBtn" class="btn btn-shuffle">🔀 Shuffle Wheel</button>
+                        <button id="abortBtn" class="btn btn-abort action-btn faded" disabled>🚫 Abort Session</button>
+                        <button id="verdictBtn" class="btn btn-verdict action-btn faded" disabled>⚖️ Render Verdict</button>
+                        <button id="spinBtn" class="btn btn-accept action-btn faded" disabled>✓ Accept ✓</button>
+                    </div>
+                    <div id="winnerDisplay" class="winner-display hidden">
+                        <div id="winnerText" class="winner-text"></div>
+                        <div id="winnerDetails" class="winner-details"></div>
+                    </div>
+                    <div id="returnMsg" class="return-msg hidden"></div>
                 </div>
             </div>
         </div>
@@ -109,7 +107,7 @@
 
     <!-- Previous Winners Modal -->
     <div id="winnersModal" class="modal-overlay hidden">
-        <div class="modal-content">
+        <div class="modal-content" style="position:relative">
             <div class="modal-header">
                 <h2>🏆 Previous Winners</h2>
                 <button id="modalCloseBtn" class="modal-close-btn">✕</button>
@@ -117,6 +115,7 @@
             <div class="modal-body" id="winnersList">
                 <p class="empty-msg">No winners yet! Spin the wheel~ ✨</p>
             </div>
+            <div id="winnersTooltip" class="pts-tooltip hidden"></div>
             <div class="modal-footer" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
                 <button id="importWinnersBtn" class="btn btn-clear-winners">📥 Import History</button>
                 <button id="clearWinnersBtn" class="btn btn-clear-winners">🗑️ Clear History</button>
@@ -124,32 +123,34 @@
         </div>
     </div>
 
-    <!-- Stats Modal -->
-    <div id="statsModal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>📊 Victim Stats</h2>
-                <button id="statsCloseBtn" class="modal-close-btn">✕</button>
-            </div>
-            <div class="modal-body" id="statsBody">
-                <p class="empty-msg">Loading stats…</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Debt Matrix Modal -->
+    <!-- Stats & Debt Matrix Modal -->
     <div id="debtMatrixModal" class="modal-overlay hidden">
-        <div class="modal-content debt-matrix-content">
-            <div class="modal-header">
-                <h2>💳 Debt Matrix</h2>
-                <button id="debtMatrixCloseBtn" class="modal-close-btn">✕</button>
+        <div class="panel-stack">
+            <!-- Debt Matrix Panel (completely independent) -->
+            <div id="debtMatrixPanel" class="floating-panel">
+                <div class="panel-header">
+                    <h2>💳 Debt Matrix</h2>
+                    <button id="debtMatrixCloseBtn" class="modal-close-btn">✕</button>
+                </div>
+                <div class="panel-body" id="debtMatrixPanelBody">
+                    <div id="debtMatrixSummary" style="margin-bottom:0.5rem;font-size:0.85rem;color:#aaa"></div>
+                    <table id="debtMatrixTable" class="debt-matrix-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
-            <div class="modal-body debt-matrix-modal-body">
-                <div id="debtMatrixSummary" style="margin-bottom:0.5rem;font-size:0.85rem;color:#aaa"></div>
-                <table id="debtMatrixTable" class="debt-matrix-table">
-                    <thead></thead>
-                    <tbody></tbody>
-                </table>
+
+            <!-- Victim Stats Panel (completely independent) -->
+            <div id="statsPanel" class="floating-panel">
+                <div class="panel-header">
+                    <h2>📊 Victim Stats</h2>
+                </div>
+                <div class="panel-body" id="statsPanelBody">
+                    <div id="statsBody">
+                        <p class="empty-msg" style="padding:1rem">Loading stats…</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -251,7 +252,17 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
             color: #a78bfa;
             white-space: nowrap;
         }
-        .debt-matrix-content { width: auto !important; max-width: none !important; display: inline-flex !important; }
+        .panel-stack { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 2rem; max-height: 95vh; overflow-y: auto; width: 100%; }
+        .floating-panel { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden; }
+        .floating-panel .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1.2rem; border-bottom: 1px solid #2a2a3e; }
+        .floating-panel .panel-header h2 { margin: 0; font-size: 1rem; color: #e0e0e0; }
+        .floating-panel .panel-body { overflow: auto; padding: 0.8rem; }
+        #debtMatrixPanel { align-self: center; }
+        #debtMatrixPanel .panel-body { overflow-x: auto; }
+        #statsPanel { align-self: center; min-width: 600px; max-width: 95vw; }
+        #statsPanel .panel-body { overflow-x: auto; max-height: 50vh; }
+        .debt-matrix-table td.cell-diagonal { background: #0f0f1a; }
+        .debt-matrix-content .stats-table { width: 100%; min-width: 600px; }
         .debt-matrix-table { border-collapse: collapse; width: auto; font-size: 0.7rem; }
         .debt-matrix-table th, .debt-matrix-table td { border: 1px solid #2a2a3e; padding: 0.15rem 0.3rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .debt-matrix-table th { background: #1a1a2e; color: #ffd93d; font-weight: 600; }
@@ -271,8 +282,8 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
             background: #0f0f1a;
             border: 1px solid #3a3a52;
             border-radius: 8px;
-            padding: 0.5rem 0.7rem;
-            font-size: 0.75rem;
+            padding: 0.65rem 0.9rem;
+            font-size: 0.975rem;
             line-height: 1.5;
             white-space: pre;
             z-index: 99999;
@@ -283,6 +294,7 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
         .pts-tooltip .neg { color: #ff6b6b; }
         .pts-tooltip .summary { color: #ffd93d; border-top: 1px solid #2a2a3e; margin-top: 0.2rem; padding-top: 0.2rem; }
         .pts-tooltip.hidden { display: none; }
+        #winnersTooltip { position: absolute; z-index: 99999; }
         #debtMatrixSummary { display: none; }
         .retro-vote-btn:hover {
             background: rgba(124, 58, 237, 0.15);
@@ -295,6 +307,7 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
         .vote-chip-pass { background:rgba(46,160,67,0.15); color:#6bcb77; border-color:rgba(46,160,67,0.3); }
         .vote-chip-punish { background:rgba(218,54,51,0.15); color:#ff6b6b; border-color:rgba(218,54,51,0.3); }
         .vote-chip-na { background:rgba(255,215,0,0.1); color:#ffd700; border-color:rgba(255,215,0,0.25); }
+        .vote-chip-aborted { background:rgba(160,160,192,0.12); color:#a0a0c0; border-color:rgba(160,160,192,0.25); }
         .editable-field { cursor:pointer; border-bottom:1px dashed rgba(255,255,255,0.15); padding:0 0.1rem; }
         .editable-field:hover { border-bottom-color:#6bcb77; }
         .editable-input { background:#0f0f1a; border:1px solid #3a3a52; color:#e0e0e0; padding:0.1rem 0.3rem; border-radius:4px; font-size:0.85rem; width:auto; min-width:3rem; }
@@ -303,6 +316,6 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <div id="ptsTooltip" class="pts-tooltip hidden"></div>
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=37"></script>
 </body>
 </html>

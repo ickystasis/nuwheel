@@ -9,51 +9,28 @@ body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: #0f0f1a;
     color: #e0e0e0;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    padding: 2rem 1rem;
+    align-items: stretch;
+    padding: 0;
 }
 
 .container {
-    max-width: 1200px;
+    max-width: none;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
 }
 
-/* ===== Header ===== */
-header {
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-
-header h1 {
-    font-size: 2.2rem;
-    background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #ff6b6b);
-    background-size: 300% 300%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradient-shift 4s ease infinite;
-}
-
-@keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-}
-
-header h1 sup {
-    font-size: 0.5em;
-    vertical-align: super;
-}
-
-/* ===== Add Section ===== */
+/* ===== Add Section (above victims list) ===== */
 .add-section {
     display: flex;
-    gap: 0.5rem;
-    max-width: 500px;
-    margin: 0 auto 1.5rem;
-    justify-content: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
 }
 
 .add-section input {
@@ -145,15 +122,16 @@ header h1 sup {
     transform: none;
 }
 
-/* ===== Action Row ===== */
+/* ===== Action Row (inside Side Panel) ===== */
 .action-row {
     position: relative;
     display: flex;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.6rem;
     justify-content: center;
-    align-items: center;
-    margin-top: 1.5rem;
-    min-height: 56px;
+    align-items: stretch;
+    margin-top: 0;
+    min-height: 0;
 }
 
 .btn-accept {
@@ -179,8 +157,15 @@ header h1 sup {
     opacity: 0;
     transform: scale(0.8);
     pointer-events: none;
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    overflow: hidden;
+    flex: 0 0 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
+    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s, height 0.3s ease, padding 0.3s ease, margin 0.3s ease;
 }
 
 .btn-abort {
@@ -279,11 +264,12 @@ header h1 sup {
 }
 
 .return-msg {
-    margin-top: 0.6rem;
-    font-size: 0.9rem;
+    margin-top: 0.3rem;
+    font-size: 0.85rem;
     color: #ffd93d;
     font-weight: 600;
     text-align: center;
+    flex-shrink: 0;
     animation: fade-in 0.5s ease-out;
 }
 
@@ -295,9 +281,54 @@ header h1 sup {
 /* ===== Main Layout ===== */
 .main-layout {
     display: grid;
-    grid-template-columns: 1fr 1.5fr;
-    gap: 2rem;
-    align-items: start;
+    grid-template-columns: 360px 1fr 360px;
+    gap: 0;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+    padding: 0 0 0.5rem 0;
+}
+
+.left-column {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+    margin-left: 25px;
+}
+
+.wheel-panel {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
+    grid-column: 2;
+    justify-self: center;
+    width: 100%;
+}
+
+.side-panel {
+    margin-right: 25px;
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.side-panel .action-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    justify-content: center;
+    align-items: stretch;
 }
 
 .watcher-panel-header {
@@ -326,6 +357,49 @@ header h1 sup {
     .main-layout {
         grid-template-columns: 1fr;
     }
+    .left-column {
+        margin-left: 0;
+    }
+    .side-panel {
+        margin-right: 0;
+    }
+    .wheel-panel {
+        grid-column: auto;
+    }
+    .left-column {
+        grid-column: auto;
+    }
+    .side-panel {
+        grid-column: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 0.5rem;
+    }
+    .side-panel .action-group {
+        flex: none;
+        width: auto;
+    }
+    .side-panel .action-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+    }
+    .side-panel #abortBtn,
+    .side-panel #spinBtn,
+    .side-panel #verdictBtn,
+    .side-panel #shuffleBtn {
+        width: auto;
+        min-width: 10rem;
+    }
+    .container {
+        height: auto;
+    }
+    body {
+        overflow: auto;
+        height: auto;
+    }
 }
 
 /* ===== Watchers Panel ===== */
@@ -334,6 +408,8 @@ header h1 sup {
     border-radius: 12px;
     padding: 1.2rem;
     border: 1px solid #2a2a3e;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .list-panel h2 {
@@ -659,23 +735,16 @@ header h1 sup {
     border-color: #ff6b6b;
 }
 
-/* ===== Wheel Panel ===== */
-.wheel-panel {
-    text-align: center;
-}
-
 .wheel-wrapper {
     position: relative;
-    display: inline-block;
-}
-
-.action-row {
-    position: relative;
-    display: flex;
-    justify-content: center;
+    display: inline-flex;
     align-items: center;
-    margin-top: 1.2rem;
-    min-height: 52px;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: 100%;
+    overflow: hidden;
+    align-self: center;
 }
 
 .btn-shuffle {
@@ -733,18 +802,18 @@ header h1 sup {
 #abortBtn,
 #verdictBtn,
 #spinBtn {
-    position: absolute;
+    position: static;
 }
 
 #verdictBtn,
 #spinBtn {
-    left: 50%;
-    transform: translateX(-50%);
+    left: auto;
+    transform: none;
 }
 
 #abortBtn {
-    left: calc(50% - 12rem);
-    transform: translateX(-50%);
+    left: auto;
+    transform: none;
 }
 
 .pointer {
@@ -762,23 +831,23 @@ header h1 sup {
 
 #wheelCanvas {
     display: block;
-    margin: 0 auto;
     border-radius: 50%;
     box-shadow: 0 0 30px rgba(100, 100, 200, 0.2);
-    max-width: 100%;
-    height: auto;
+    flex-shrink: 0;
 }
 
 .wheel-info {
-    margin-top: 0.6rem;
     color: #666;
     font-size: 0.9rem;
+    text-align: right;
+    flex-shrink: 0;
 }
 
 /* ===== Winner Display ===== */
 .winner-display {
-    margin-top: 1rem;
-    min-height: 4rem;
+    text-align: center;
+    min-height: 3rem;
+    flex-shrink: 0;
 }
 
 .winner-text {
@@ -791,7 +860,7 @@ header h1 sup {
 #spinBtn,
 #verdictBtn,
 #shuffleBtn {
-    min-width: 10rem;
+    width: 100%;
 }
 
 .winner-details {
@@ -839,7 +908,6 @@ header h1 sup {
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
 }
 
 .modal-overlay.hidden {
@@ -980,6 +1048,39 @@ header h1 sup {
     transform: scale(1.03);
     box-shadow: 0 0 15px rgba(107, 203, 119, 0.3);
 }
+
+.btn-icon {
+    font-size: 1.1rem;
+    padding: 0.35rem 0.5rem;
+    min-width: 0;
+    width: auto;
+    background: #1a1a2e;
+    border: 1px solid #2a2a3e;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+}
+.btn-icon:hover {
+    background: #2a2a3e;
+    border-color: #3a3a52;
+    transform: scale(1.1);
+}
+
+#addWatcherBtn.btn-icon { background: rgba(107, 203, 119, 0.15); border-color: rgba(107, 203, 119, 0.3); }
+#addWatcherBtn.btn-icon:hover { background: rgba(107, 203, 119, 0.25); }
+#winnersBtn.btn-icon { background: rgba(255, 215, 0, 0.15); border-color: rgba(255, 215, 0, 0.3); }
+#winnersBtn.btn-icon:hover { background: rgba(255, 215, 0, 0.25); }
+#statsBtn.btn-icon { background: rgba(77, 150, 255, 0.15); border-color: rgba(77, 150, 255, 0.3); }
+#statsBtn.btn-icon:hover { background: rgba(77, 150, 255, 0.25); }
+#debtMatrixBtn.btn-icon { background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.3); }
+#debtMatrixBtn.btn-icon:hover { background: rgba(167, 139, 250, 0.25); }
+#adminBtn.btn-icon { background: rgba(255, 107, 107, 0.15); border-color: rgba(255, 107, 107, 0.3); }
+#adminBtn.btn-icon:hover { background: rgba(255, 107, 107, 0.25); }
+#spinControlsBtn.btn-icon { background: rgba(255, 159, 67, 0.15); border-color: rgba(255, 159, 67, 0.3); }
+#spinControlsBtn.btn-icon:hover { background: rgba(255, 159, 67, 0.25); }
+label.btn-icon[for="centerImageInput"] { background: rgba(255, 107, 187, 0.15); border-color: rgba(255, 107, 187, 0.3); }
+label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0.25); }
 
 
 .modal-content {
