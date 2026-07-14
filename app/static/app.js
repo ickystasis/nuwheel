@@ -1116,15 +1116,15 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Pure spin: fast start → smooth decel → agonizing crawl → stop
-    const rotations = 30 + Math.random() * 20;    // 30-50 total revs
+    // Spin: fast start → medium brake → brake fade in last 20% for agonizing crawl
+    const rotations = 40 + Math.random() * 25;    // 40-65 total revs
     const targetAngle = rotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    const duration = 30000 + Math.random() * 10000; // 30-40 seconds
+    const duration = 40000 + Math.random() * 15000; // 40-55 seconds
     const startTime = performance.now();
     const startRotation = wheelRotation;
-    // exp controls the easing curve: ~2 = fast start, gradual decel, long crawl
-    const exp = 2.0 + Math.random() * 1.0;          // 2.0-3.0
+    // Higher exp > 2 means deceleration rate itself decreases toward the end
+    const exp = 3.0 + Math.random() * 1.5;          // 3.0-4.5
 
     function animate(now) {
         const elapsed = now - startTime;
