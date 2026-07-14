@@ -130,17 +130,17 @@
                 <h2>💳 Debt Matrix &amp; Stats</h2>
                 <button id="debtMatrixCloseBtn" class="modal-close-btn">✕</button>
             </div>
-            <div class="modal-body debt-matrix-modal-body" style="overflow-y:auto;max-height:90vh">
-                <div id="debtMatrixSummary" style="margin-bottom:0.5rem;font-size:0.85rem;color:#aaa"></div>
-                <table id="debtMatrixTable" class="debt-matrix-table">
-                    <thead></thead>
-                    <tbody></tbody>
-                </table>
+            <div class="modal-body debt-matrix-modal-body">
+                <div class="debt-matrix-section">
+                    <div id="debtMatrixSummary" style="margin-bottom:0.5rem;font-size:0.85rem;color:#aaa"></div>
+                    <table id="debtMatrixTable" class="debt-matrix-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
 
-                <hr style="border-color:#2a2a3e;margin:1.5rem 0">
-
-                <div id="statsSection">
-                    <h3 style="color:#ffd93d;margin:0 0 0.3rem;font-size:1rem">📊 Victim Stats</h3>
+                <div class="stats-section">
+                    <h3 style="color:#ffd93d;margin:0 0 0.5rem;font-size:1rem">📊 Victim Stats</h3>
                     <div id="statsBody">
                         <p class="empty-msg" style="padding:1rem">Loading stats…</p>
                     </div>
@@ -249,6 +249,8 @@ date,title_name,proposer,weight,punish,david,peng,chris,anthony,matt,matty,g. ma
         .debt-matrix-content { width: auto !important; max-width: none !important; display: block !important; max-height: none !important; }
         .debt-matrix-content .stats-table { width: 100%; min-width: 600px; }
         .debt-matrix-modal-body { overflow-y: auto; max-height: 90vh; }
+        .debt-matrix-section { display: inline-block; border: 1px solid #2a2a3e; border-radius: 8px; padding: 0.5rem; background: #0f0f1a; }
+        .stats-section { border: 1px solid #2a2a3e; border-radius: 8px; padding: 1rem; background: #0f0f1a; overflow-x: auto; margin-top: 1rem; }
         .debt-matrix-table { border-collapse: collapse; width: auto; font-size: 0.7rem; }
         .debt-matrix-table th, .debt-matrix-table td { border: 1px solid #2a2a3e; padding: 0.15rem 0.3rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .debt-matrix-table th { background: #1a1a2e; color: #ffd93d; font-weight: 600; }

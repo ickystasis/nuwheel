@@ -639,6 +639,17 @@ def get_stats():
 
     watchers = db.execute('SELECT id, name FROM watchers ORDER BY created_at ASC').fetchall()
 
+    # Compute average movie weight per watcher from titles table
+    from collections import defaultdict
+    titles_rows = db.execute('SELECT watcher_id, points FROM titles').fetchall()
+    weight_sums = defaultdict(lambda: [0, 0])  # {watcher_id: [sum, count]}
+    for t in titles_rows:
+        weight_sums[t['watcher_id']][0] += t['points']
+        weight_sums[t['watcher_id']][1] += 1
+    avg_weights = {}
+    for wid, (total, cnt) in weight_sums.items():
+        avg_weights[wid] = round(total / cnt, 1) if cnt else 6.0
+
     def compute_stats_for_rows(source_rows):
         total = len(source_rows)
         result = []
@@ -679,6 +690,7 @@ def get_stats():
                 'pick_count': pick_count,
                 'punish_count': punish_count,
                 'punish_vote_count': punish_vote_count,
+                'avg_movie_weight': avg_weights.get(watcher['id'], 6.0),
                 'attendance_pct': round(attendance_count / max(1, total) * 100, 1) if total else 0.0,
                 'pick_pct': round(pick_count / max(1, total) * 100, 1) if total else 0.0,
                 'adjusted_pick_pct': round(pick_count / max(1, attendance_count) * 100, 1) if attendance_count else 0.0,
