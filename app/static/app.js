@@ -1116,34 +1116,30 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Spin: fast start → medium brake → progressive brake fade at end
-    // exp=4 gives: last 20% @ 16% brake, last 10% @ 4%, last 5% @ 1% of middle rate
-    const rotations = 45 + Math.random() * 25;    // 45-70 total revs
-    const targetAngle = rotations * Math.PI * 2 + Math.random() * Math.PI * 2;
-    const targetRotation = wheelRotation + targetAngle;
-    const duration = 45000 + Math.random() * 15000; // 45-60 seconds
-    const startTime = performance.now();
-    const startRotation = wheelRotation;
-    const exp = 4.0;
+    // Pure physics: initial velocity + friction that fades with speed
+    const v0 = 150 + Math.random() * 150;         // 150-300 RPM initial
+    const v0_rad = v0 / 60 * 2 * Math.PI;          // convert to rad/s
+    const k = 0.03 + Math.random() * 0.07;          // 0.03-0.10 friction coefficient
+    let velocity = v0_rad;
+    let prevTime = performance.now();
 
     function animate(now) {
-        const elapsed = now - startTime;
-        const t = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - t, exp);
-        wheelRotation = startRotation + (targetRotation - startRotation) * eased;
-        // Never let the wheel go backwards
-        if (wheelRotation < startRotation) wheelRotation = startRotation;
+        const dt = Math.min((now - prevTime) / 1000, 0.05);
+        prevTime = now;
+        // Braking proportional to velocity: dv/dt = -k * v
+        // At 10% speed → 10% braking, at 1% speed → 1% braking
+        velocity -= k * velocity * dt;
+        if (velocity < 0) velocity = 0;
+        wheelRotation += velocity * dt;
         drawWheel(wheelRotation);
         const currentSeg = getWinnerSegmentIndex();
         if (currentSeg !== lastTickSegment) {
             lastTickSegment = currentSeg;
             playTick();
         }
-        if (t < 1) {
+        if (velocity > 0.003) {
             animFrameId = requestAnimationFrame(animate);
         } else {
-            wheelRotation = targetRotation;
-            drawWheel(wheelRotation);
             onSpinComplete();
         }
     }
