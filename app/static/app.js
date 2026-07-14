@@ -1116,14 +1116,15 @@ function spinWheel() {
     returnMsg.style.color = '';
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
-    // Target: ~60s total, ~120 RPM start, ~1 RPM last 10s, lots of RNG
-    const exp = 2.5 + Math.random() * 1.5 + spinSettings.decelSharpness * 2;
-    const rotations = 35 + Math.random() * 25;
+    // Pure spin: fast start → smooth decel → agonizing crawl → stop
+    const rotations = 30 + Math.random() * 20;    // 30-50 total revs
     const targetAngle = rotations * Math.PI * 2 + Math.random() * Math.PI * 2;
     const targetRotation = wheelRotation + targetAngle;
-    const duration = 55000 + Math.random() * 15000 + spinSettings.finalCrawl * 20000;
+    const duration = 30000 + Math.random() * 10000; // 30-40 seconds
     const startTime = performance.now();
     const startRotation = wheelRotation;
+    // exp controls the easing curve: ~2 = fast start, gradual decel, long crawl
+    const exp = 2.0 + Math.random() * 1.0;          // 2.0-3.0
 
     function animate(now) {
         const elapsed = now - startTime;
