@@ -711,10 +711,28 @@ function renderWatchers() {
         const addTitleBtn = document.createElement('button');
         addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
         addTitleBtn.textContent = '➕ Add movie';
-        addTitleBtn.addEventListener('click', () => {
-            const newTitle = { id: null, name: '', points: 1 };
-            w.titles.push(newTitle);
-            titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
+        addTitleBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/titles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ watcher_id: watcher.id, name: '', points: 1 }),
+            });
+            if (res.ok) {
+                const restored = await res.json();
+                w.titles.push(restored);
+                titlesContainer.appendChild(createTitleRow(w, restored, w.titles.length - 1));
+            } else {
+                const err = await res.json().catch(() => ({}));
+                // Title name is required means no archived title to restore
+                if (res.status === 400 && err.error === 'Title name is required') {
+                    const newTitle = { id: null, name: '', points: 1 };
+                    w.titles.push(newTitle);
+                    titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
+                } else {
+                    showError(err.error || 'Failed to add movie');
+                    return;
+                }
+            }
             updateWheelInfo();
         });
 

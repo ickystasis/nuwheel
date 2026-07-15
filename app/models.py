@@ -93,6 +93,11 @@ def init_db(app):
             db.execute('ALTER TABLE titles ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0')
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Migration: add archived column for soft-delete
+        try:
+            db.execute('ALTER TABLE titles ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass  # column already exists
         db.execute('''
             CREATE TABLE IF NOT EXISTS titles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,6 +105,7 @@ def init_db(app):
                 name TEXT NOT NULL,
                 points INTEGER NOT NULL DEFAULT 1,
                 display_order INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (watcher_id) REFERENCES watchers(id) ON DELETE CASCADE
             )
