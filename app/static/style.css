@@ -1204,6 +1204,33 @@ label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0
     background: rgba(255, 107, 107, 0.1);
 }
 
+#winnersFilterBar {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.5rem 1.5rem;
+    border-bottom: 1px solid #2a2a3e;
+    flex-wrap: wrap;
+}
+
+#winnersFilterBar select {
+    background: #16162a;
+    color: #e0e0e0;
+    border: 1px solid #3a3a52;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    outline: none;
+}
+
+#winnersFilterBar select:hover {
+    border-color: #5a5a72;
+}
+
+#winnersFilterBar select:focus {
+    border-color: #4d96ff;
+}
+
 .modal-body {
     padding: 1rem 1.5rem;
     overflow-y: auto;

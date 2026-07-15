@@ -1722,13 +1722,52 @@ function makeEditableField(value, onChange) {
     return span;
 }
 
+function populateProposerFilter() {
+    const sel = document.getElementById('filterProposer');
+    if (!sel) return;
+    const current = sel.value;
+    const names = [...new Set(winners.map(w => w.watcher_name).filter(Boolean))];
+    names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    sel.innerHTML = '<option value="all">All Proposers</option>' + names.map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('');
+    sel.value = current;
+}
+
 function renderWinnersList() {
+    const judgementEl = document.getElementById('filterJudgement');
+    const weightEl = document.getElementById('filterWeight');
+    const proposerEl = document.getElementById('filterProposer');
+
     winnersList.innerHTML = '';
     if (winners.length === 0) {
         winnersList.innerHTML = '<p class="empty-msg">No winners yet! Spin the wheel~ ✨</p>';
         return;
     }
-    for (const w of winners) {
+
+    populateProposerFilter();
+
+    const jFilter = judgementEl ? judgementEl.value : 'all';
+    const wFilter = weightEl ? weightEl.value : 'all';
+    const pFilter = proposerEl ? proposerEl.value : 'all';
+
+    const filtered = winners.filter(w => {
+        if (jFilter === 'punish' && w.judgement !== 'punish') return false;
+        if (jFilter === 'not-punish' && w.judgement === 'punish') return false;
+        if (wFilter === '1') {
+            const budget = parseInt(w.watcher_budget) || 0;
+            const movieCount = parseInt(w.watcher_movie_count) || 0;
+            const isGold = w.weight == 1 && (budget === 0 || budget === 1) && (movieCount === 0 || movieCount === 1);
+            if (!isGold) return false;
+        }
+        if (pFilter !== 'all' && w.watcher_name !== pFilter) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        winnersList.innerHTML = '<p class="empty-msg">No winners match the current filters.</p>';
+        return;
+    }
+
+    for (const w of filtered) {
         const budget = parseInt(w.watcher_budget) || 0;
         const movieCount = parseInt(w.watcher_movie_count) || 0;
         const isGold = w.weight == 1 && (budget === 0 || budget === 1) && (movieCount === 0 || movieCount === 1);
@@ -1981,6 +2020,13 @@ function renderWinnersList() {
 }
 
 function openWinnersModal() {
+    // Reset filters to defaults
+    const jEl = document.getElementById('filterJudgement');
+    const wEl = document.getElementById('filterWeight');
+    const pEl = document.getElementById('filterProposer');
+    if (jEl) jEl.value = 'all';
+    if (wEl) wEl.value = 'all';
+    if (pEl) pEl.value = 'all';
     renderWinnersList();
     winnersModal.classList.remove('hidden');
 }
@@ -2574,6 +2620,11 @@ importWinnersBtn.addEventListener('click', () => {
     importWinnersModal.classList.remove('hidden');
     setTimeout(() => importWinnersText.focus(), 200);
 });
+
+// Winners filter dropdowns
+document.getElementById('filterJudgement')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterWeight')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterProposer')?.addEventListener('change', renderWinnersList);
 
 importWinnersCloseBtn.addEventListener('click', () => importWinnersModal.classList.add('hidden'));
 importWinnersModal.addEventListener('click', (e) => {
