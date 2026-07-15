@@ -724,10 +724,9 @@ function renderWatchers() {
             closeRecentMoviesPopup();
             updateWheelInfo();
 
-            // Fetch recent movies from winner history for this watcher
             let recent = [];
             try {
-                const res = await fetch(`/api/watchers/${watcher.id}/recent-movies`);
+                const res = await fetch(`/api/watchers/${w.id}/recent-movies`);
                 if (res.ok) recent = await res.json();
             } catch (_) {}
 
@@ -739,7 +738,16 @@ function renderWatchers() {
                 return;
             }
 
-            // Build and show the popup
+            let rowCreated = false;
+            function ensureBlankRow() {
+                if (rowCreated) return;
+                rowCreated = true;
+                const newTitle = { id: null, name: '', points: 1 };
+                w.titles.push(newTitle);
+                titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
+                updateWheelInfo();
+            }
+
             const popup = document.createElement('div');
             popup.className = 'recent-movies-popup';
             recent.forEach(movie => {
@@ -751,7 +759,7 @@ function renderWatchers() {
                     const res = await fetch('/api/titles', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ watcher_id: watcher.id, name: movie.name, points: movie.points }),
+                        body: JSON.stringify({ watcher_id: w.id, name: movie.name, points: movie.points }),
                     });
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
@@ -768,20 +776,20 @@ function renderWatchers() {
             addTitleBtn.parentNode.insertBefore(popup, addTitleBtn.nextSibling);
             activeRecentPopup = popup;
 
-            // Close on click outside
             const outsideHandler = (ev) => {
                 if (activeRecentPopup && !activeRecentPopup.contains(ev.target) && ev.target !== addTitleBtn) {
                     closeRecentMoviesPopup();
                     document.removeEventListener('click', outsideHandler);
+                    ensureBlankRow();
                 }
             };
             setTimeout(() => document.addEventListener('click', outsideHandler), 0);
 
-            // Close when user starts typing in any title input
             const typeHandler = () => {
                 if (activeRecentPopup) {
                     closeRecentMoviesPopup();
                     document.removeEventListener('input', typeHandler, true);
+                    ensureBlankRow();
                 }
             };
             document.addEventListener('input', typeHandler, true);
