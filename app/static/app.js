@@ -54,7 +54,8 @@ async function showRecentPopup(watcherId, anchorBtn, nameInput, title, pointsInp
     recent.forEach(movie => {
         const item = document.createElement('div');
         item.className = 'recent-movie-item';
-        item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
+        const dateHtml = movie.last_seen ? `<span class="recent-movie-date">${escHtml(movie.last_seen)}</span>` : '';
+        item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>${dateHtml}`;
         item.addEventListener('mousedown', (e) => {
             e.preventDefault();
             if (popupBlurTimer) {

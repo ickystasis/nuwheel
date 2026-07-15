@@ -731,7 +731,8 @@ body.auth-locked .cell-editable {
 .recent-movie-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
+    flex-wrap: wrap;
     padding: 0.45rem 0.85rem;
     cursor: pointer;
     transition: background 0.15s;
@@ -751,6 +752,13 @@ body.auth-locked .cell-editable {
     color: #ffd93d;
     font-weight: 700;
     margin-left: 0.75rem;
+}
+
+.recent-movie-date {
+    display: block;
+    color: #666;
+    font-size: 0.7rem;
+    margin-top: 0.1rem;
 }
 
 .balance-box {
