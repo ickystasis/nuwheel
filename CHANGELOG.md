@@ -47,6 +47,7 @@
 - `backdrop-filter: blur(4px)` removed from `.modal-overlay` for OBS compatibility
 
 ### Bug Fixes
+- Fixed internal nginx listening on port 443 instead of 9642 (mismatch with docker-compose port mapping)
 - Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
