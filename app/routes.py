@@ -324,8 +324,9 @@ def update_watcher_color(watcher_id):
 
 @bp.route('/watchers/<int:watcher_id>/recent-movies', methods=['GET'])
 def recent_movies(watcher_id):
-    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun
-    or has archived (removed from wheel). Includes both winner history and archived titles.
+    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun,
+    lost on the wheel, or archived (removed). Pulls from winner history, wheel_movies (all spins),
+    and archived titles — so removed movies can be quickly re-added.
     """
     db = get_db(current_app)
     watcher = db.execute('SELECT name FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
@@ -334,21 +335,30 @@ def recent_movies(watcher_id):
 
     seen = set()
     result = []
+    name = watcher['name']
 
-    # Winner history
-    rows = db.execute(
-        'SELECT title_name, weight FROM winners '
-        'WHERE watcher_name = ? '
-        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 20',
-        (watcher['name'],)
-    ).fetchall()
-    for r in rows:
-        key = r['title_name'].lower()
+    def _add(movie_name, points):
+        key = movie_name.lower()
         if key not in seen:
             seen.add(key)
-            result.append({'name': r['title_name'], 'points': r['weight']})
+            result.append({'name': movie_name, 'points': points})
 
-    # Archived titles (wheel losses — removed without winning)
+    # 1. Wheel losses — movies this watcher had on the wheel during any spin (even when others won)
+    wheel_rows = db.execute(
+        'SELECT wheel_movies FROM winners '
+        'WHERE wheel_movies IS NOT NULL AND wheel_movies != \'{}\' AND wheel_movies != \'\' '
+        'ORDER BY won_at DESC LIMIT 100'
+    ).fetchall()
+    for row in wheel_rows:
+        try:
+            wm = json.loads(row['wheel_movies'])
+            if name in wm:
+                for movie in wm[name]:
+                    _add(movie['name'], movie.get('weight', 1))
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    # 2. Archived titles — movies this watcher removed from the wheel
     archived = db.execute(
         'SELECT name, points FROM titles '
         'WHERE watcher_id = ? AND archived = 1 '
@@ -356,10 +366,17 @@ def recent_movies(watcher_id):
         (watcher_id,)
     ).fetchall()
     for r in archived:
-        key = r['name'].lower()
-        if key not in seen:
-            seen.add(key)
-            result.append({'name': r['name'], 'points': r['points']})
+        _add(r['name'], r['points'])
+
+    # 3. Winner history — movies this watcher won with
+    rows = db.execute(
+        'SELECT title_name, weight FROM winners '
+        'WHERE watcher_name = ? '
+        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 20',
+        (name,)
+    ).fetchall()
+    for r in rows:
+        _add(r['title_name'], r['weight'])
 
     return jsonify(result[:10])
 

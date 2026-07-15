@@ -3,8 +3,8 @@
 ## [1.9.0] - 2026-07-15
 
 ### Recent Movies Popup
-- Recent movies popup now includes archived titles (wheel losses) in addition to winner history, making it easy to re-add previously removed movies
-- Archived titles appear after winner history, deduplicated by name
+- Recent movies popup now surfaces movies from three sources: wheel losses (movies the watcher had on the wheel during any spin, even when others won), archived titles (movies removed from the wheel), and winner history — making it easy to re-add previously removed movies
+- Sources prioritized: wheel losses > archived > winners, deduplicated by name, max 10 items
 
 ### Victim Panel Visibility
 - Victim panel auto-hides during wheel spin and winner display, reappears when voting phase starts — puts focus on the wheel during the spin
