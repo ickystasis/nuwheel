@@ -208,6 +208,7 @@ def get_settings():
                 settings[key] = val
         else:
             settings[key] = val
+    settings['site_title'] = current_app.config.get('SITE_TITLE', 'Wheel of Doom(b)')
     return jsonify(settings)
 
 

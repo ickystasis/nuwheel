@@ -63,6 +63,7 @@ Open http://localhost:5000
 |----------|---------|-------------|
 | `DB_DIR` | `/data` | Directory for SQLite database |
 | `ADMIN_PASSWORD` | `setadminpass` | Password for the admin panel |
+| `SITE_TITLE` | `Wheel of Doom(b)` | Browser tab title |
 
 ### Audio Volume Mounts
 

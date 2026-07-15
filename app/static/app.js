@@ -195,6 +195,9 @@ async function fetchSettings() {
         if (settings.spin_settings) {
             // spin settings are persisted but no longer have a UI
         }
+        if (settings.site_title) {
+            document.title = settings.site_title;
+        }
         if (settings.center_image) {
             const img = new Image();
             img.onload = () => { centerImage = img; drawWheel(wheelRotation); };

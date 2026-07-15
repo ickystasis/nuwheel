@@ -11,6 +11,7 @@ def create_app():
     db_dir = os.environ.get('DB_DIR', '/data')
     os.makedirs(db_dir, exist_ok=True)
     app.config['DATABASE'] = os.path.join(db_dir, 'wheel.db')
+    app.config['SITE_TITLE'] = os.environ.get('SITE_TITLE', 'Wheel of Doom(b)')
 
     # Init DB on startup
     from . import models
