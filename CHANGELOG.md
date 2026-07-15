@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.9.0] - 2026-07-15
+
+### Recent Movies Popup
+- Recent movies popup now includes archived titles (wheel losses) in addition to winner history, making it easy to re-add previously removed movies
+- Archived titles appear after winner history, deduplicated by name
+
+### Victim Panel Visibility
+- Victim panel auto-hides during wheel spin and winner display, reappears when voting phase starts — puts focus on the wheel during the spin
+- Button bar remains visible at all times
+
+### UI Cleanup
+- Spin Settings button (⚙️) and modal removed — the sliders had no effect on wheel physics
+- Lock/Unlock button (🔒) moved to always be the rightmost button in the toolbar
+- Clear History button removed from Previous Winners modal (was useful during testing, no longer needed in deployment)
+
+### Wheel Text Scaling
+- Segment text starting font size now scales with segment arc size — smaller tiles get proportionally smaller text
+- Angular constraint added: text width at the text radius must also fit within the segment's arc, preventing overlap into neighboring tiles
+
 ## [1.8.0] - 2026-07-14
 
 ### Password Protection

@@ -307,6 +307,17 @@ body {
     cursor: not-allowed;
 }
 
+.left-column.victim-panel-hidden {
+    visibility: hidden;
+    pointer-events: none;
+    transition: visibility 0.3s ease;
+}
+
+.left-column.victim-panel-hidden .add-section {
+    visibility: visible;
+    pointer-events: auto;
+}
+
 /* Auth lock — dim protected controls when not authenticated */
 body.auth-locked .action-btn,
 body.auth-locked #shuffleBtn,
@@ -1145,8 +1156,6 @@ body.auth-locked .cell-editable {
 #debtMatrixBtn.btn-icon:hover { background: rgba(167, 139, 250, 0.25); }
 #adminBtn.btn-icon { background: rgba(255, 107, 107, 0.15); border-color: rgba(255, 107, 107, 0.3); }
 #adminBtn.btn-icon:hover { background: rgba(255, 107, 107, 0.25); }
-#spinControlsBtn.btn-icon { background: rgba(255, 159, 67, 0.15); border-color: rgba(255, 159, 67, 0.3); }
-#spinControlsBtn.btn-icon:hover { background: rgba(255, 159, 67, 0.25); }
 label.btn-icon[for="centerImageInput"] { background: rgba(255, 107, 187, 0.15); border-color: rgba(255, 107, 187, 0.3); }
 label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0.25); }
 

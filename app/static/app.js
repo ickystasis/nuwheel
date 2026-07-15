@@ -192,15 +192,7 @@ async function fetchSettings() {
             activeIds = new Set(settings.active_ids);
         }
         if (settings.spin_settings) {
-            spinSettings.duration = settings.spin_settings.duration ?? spinSettings.duration;
-            spinSettings.decelSharpness = settings.spin_settings.decelSharpness ?? spinSettings.decelSharpness;
-            spinSettings.finalCrawl = settings.spin_settings.finalCrawl ?? spinSettings.finalCrawl;
-            if (velocitySlider) velocitySlider.value = spinSettings.duration;
-            if (velocityValue) velocityValue.textContent = spinSettings.duration.toFixed(2);
-            if (frictionGainSlider) frictionGainSlider.value = spinSettings.decelSharpness;
-            if (frictionGainValue) frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
-            if (finalStretchSlider) finalStretchSlider.value = spinSettings.finalCrawl;
-            if (finalStretchValue) finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+            // spin settings are persisted but no longer have a UI
         }
         if (settings.center_image) {
             const img = new Image();
@@ -224,19 +216,10 @@ const totalWeight = document.getElementById('totalWeight');
 const wheelInfo = document.getElementById('wheelInfo');
 const winnersBtn = document.getElementById('winnersBtn');
 const shuffleBtn = document.getElementById('shuffleBtn');
-const spinControlsBtn = document.getElementById('spinControlsBtn');
-const spinSettingsModal = document.getElementById('spinSettingsModal');
-const spinSettingsCloseBtn = document.getElementById('spinSettingsCloseBtn');
-const velocitySlider = document.getElementById('velocitySlider');
-const frictionGainSlider = document.getElementById('frictionGainSlider');
-const finalStretchSlider = document.getElementById('finalStretchSlider');
-const velocityValue = document.getElementById('velocityValue');
-const frictionGainValue = document.getElementById('frictionGainValue');
-const finalStretchValue = document.getElementById('finalStretchValue');
 const winnersModal = document.getElementById('winnersModal');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
 const winnersList = document.getElementById('winnersList');
-const clearWinnersBtn = document.getElementById('clearWinnersBtn');
+
 const statsBtn = document.getElementById('statsBtn');
 const statsBody = document.getElementById('statsBody');
 
@@ -257,11 +240,6 @@ const addNewWatcherBtn = document.getElementById('addNewWatcherBtn');
 const startMovieNightBtn = document.getElementById('startMovieNightBtn');
 const bypassChecksInput = document.getElementById('bypassChecks');
 let bypassPointChecks = false;
-let spinSettings = {
-    duration: parseFloat(velocitySlider?.value) || 1.1,
-    decelSharpness: parseFloat(frictionGainSlider?.value) || 0.45,
-    finalCrawl: parseFloat(finalStretchSlider?.value) || 0.35,
-};
 let centerImage = null; // uploaded center button image
 
 // Judgement refs
@@ -282,6 +260,13 @@ function applyWheelLock() {
     document.querySelectorAll('.point-step-btn').forEach(el => el.disabled = locked);
     document.querySelectorAll('.title-del-btn').forEach(el => el.disabled = locked);
     document.querySelectorAll('.add-title-btn').forEach(el => el.disabled = locked);
+    updatePanelVisibility();
+}
+
+function updatePanelVisibility() {
+    // Hide victim panel from spin start through winner display, show during voting
+    const hide = (isSpinning || !!lastWinnerInfo) && !showVoting;
+    document.querySelector('.left-column')?.classList.toggle('victim-panel-hidden', hide);
 }
 
 // Auth / Admin refs
@@ -1117,6 +1102,9 @@ function drawWheel(rotation) {
         const outerEdge = radius - pad;
         const textRadius = (innerEdge + outerEdge) / 2;
         const maxTextWidth = (outerEdge - innerEdge) * 0.92;
+        // Angular constraint: text width at textRadius must fit within the arc
+        const arcProportion = Math.max(0.35, Math.min(1.5, segments[i].points / totalPts * segments.length));
+        const angularSpace = arc * textRadius * 0.80;
 
         function wrapText(fontSize) {
             ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
@@ -1137,9 +1125,9 @@ function drawWheel(rotation) {
             return lines;
         }
 
-        let fontSize = Math.floor(wheelSize * 0.049);
+        let fontSize = Math.floor(wheelSize * 0.049 * arcProportion);
         let lines = wrapText(fontSize);
-        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > maxTextWidth))) {
+        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > Math.min(maxTextWidth, angularSpace)))) {
             fontSize -= 4;
             lines = wrapText(fontSize);
         }
@@ -2399,34 +2387,6 @@ startMovieNightBtn.addEventListener('click', async () => {
     renderAll();
 });
 shuffleBtn.addEventListener('click', shuffleWheel);
-spinControlsBtn.addEventListener('click', () => {
-    spinSettingsModal.classList.remove('hidden');
-});
-spinSettingsCloseBtn.addEventListener('click', () => {
-    spinSettingsModal.classList.add('hidden');
-});
-spinSettingsModal.addEventListener('click', (e) => {
-    if (e.target === spinSettingsModal) spinSettingsModal.classList.add('hidden');
-});
-function saveSpinSettings() {
-    saveSettings({ spin_settings: { ...spinSettings } });
-}
-
-velocitySlider.addEventListener('input', () => {
-    spinSettings.duration = parseFloat(velocitySlider.value);
-    velocityValue.textContent = spinSettings.duration.toFixed(2);
-    saveSpinSettings();
-});
-frictionGainSlider.addEventListener('input', () => {
-    spinSettings.decelSharpness = parseFloat(frictionGainSlider.value);
-    frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
-    saveSpinSettings();
-});
-finalStretchSlider.addEventListener('input', () => {
-    spinSettings.finalCrawl = parseFloat(finalStretchSlider.value);
-    finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
-    saveSpinSettings();
-});
 bypassChecksInput.addEventListener('change', () => {
     bypassPointChecks = bypassChecksInput.checked;
 });
@@ -2603,13 +2563,6 @@ statsBtn.addEventListener('click', openStatsModal);
 debtMatrixCloseBtn.addEventListener('click', closeDebtMatrix);
 debtMatrixModal.addEventListener('click', (e) => {
     if (e.target === debtMatrixModal) closeDebtMatrix();
-});
-
-clearWinnersBtn.addEventListener('click', async () => {
-    if (winners.length === 0) return;
-    if (!confirm('⚠️ This will permanently delete ALL winner history. Are you sure?')) return;
-    await clearAllWinners();
-    renderWinnersList();
 });
 
 importWinnersBtn.addEventListener('click', () => {

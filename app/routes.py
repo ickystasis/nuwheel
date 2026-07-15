@@ -324,22 +324,44 @@ def update_watcher_color(watcher_id):
 
 @bp.route('/watchers/<int:watcher_id>/recent-movies', methods=['GET'])
 def recent_movies(watcher_id):
-    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun.
-
-    Based on winner history so it survives across sessions and browsers.
+    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun
+    or has archived (removed from wheel). Includes both winner history and archived titles.
     """
     db = get_db(current_app)
     watcher = db.execute('SELECT name FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
     if not watcher:
         return jsonify({'error': 'Watcher not found'}), 404
 
+    seen = set()
+    result = []
+
+    # Winner history
     rows = db.execute(
         'SELECT title_name, weight FROM winners '
         'WHERE watcher_name = ? '
-        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 10',
+        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 20',
         (watcher['name'],)
     ).fetchall()
-    return jsonify([{'name': r['title_name'], 'points': r['weight']} for r in rows])
+    for r in rows:
+        key = r['title_name'].lower()
+        if key not in seen:
+            seen.add(key)
+            result.append({'name': r['title_name'], 'points': r['weight']})
+
+    # Archived titles (wheel losses — removed without winning)
+    archived = db.execute(
+        'SELECT name, points FROM titles '
+        'WHERE watcher_id = ? AND archived = 1 '
+        'ORDER BY id DESC LIMIT 20',
+        (watcher_id,)
+    ).fetchall()
+    for r in archived:
+        key = r['name'].lower()
+        if key not in seen:
+            seen.add(key)
+            result.append({'name': r['name'], 'points': r['points']})
+
+    return jsonify(result[:10])
 
 
 @bp.route('/titles', methods=['POST'])

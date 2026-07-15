@@ -16,12 +16,10 @@
                     <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
                     <button id="winnersBtn" class="btn btn-icon" title="Previous Winners">🏆</button>
                     <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
-
-                    <button id="lockBtn" class="btn btn-icon" title="Unlock settings" style="margin-left:auto">🔒</button>
                     <button id="adminBtn" class="btn btn-icon hidden" title="Admin">🔧</button>
-                    <button id="spinControlsBtn" class="btn btn-icon" title="Spin Settings">⚙️</button>
                     <label for="centerImageInput" class="btn btn-icon" title="Center Image" style="cursor:pointer">🖼️</label>
                     <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
+                    <button id="lockBtn" class="btn btn-icon" title="Unlock settings" style="margin-left:auto">🔒</button>
                 </div>
                 <div class="list-panel" id="watchersPanel">
                     <div class="watcher-panel-header">
@@ -43,29 +41,7 @@
                     <canvas id="wheelCanvas" width="1000" height="1000"></canvas>
                 </div>
 
-                <!-- Spin Settings Modal -->
-                <div id="spinSettingsModal" class="modal-overlay hidden">
-                    <div class="modal-content" style="max-width:380px">
-                        <div class="modal-header">
-                            <h2>⚙️ Spin Settings</h2>
-                            <button id="spinSettingsCloseBtn" class="modal-close-btn">✕</button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="slider-row" style="margin-bottom:1rem">
-                                <label for="velocitySlider">Spin duration <span id="velocityValue">1.10</span></label>
-                                <input type="range" id="velocitySlider" min="0.6" max="12.0" step="0.1" value="1.10" />
-                            </div>
-                            <div class="slider-row" style="margin-bottom:1rem">
-                                <label for="frictionGainSlider">Deceleration sharpness <span id="frictionGainValue">0.45</span></label>
-                                <input type="range" id="frictionGainSlider" min="0.0" max="1.0" step="0.05" value="0.45" />
-                            </div>
-                            <div class="slider-row">
-                                <label for="finalStretchSlider">Final crawl <span id="finalStretchValue">0.35</span></label>
-                                <input type="range" id="finalStretchSlider" min="0.0" max="1.0" step="0.05" value="0.35" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                
             </div>
 
             <!-- Side Panel -->
@@ -119,7 +95,6 @@
             <div id="winnersTooltip" class="pts-tooltip hidden"></div>
             <div class="modal-footer" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
                 <button id="importWinnersBtn" class="btn btn-clear-winners">📥 Import History</button>
-                <button id="clearWinnersBtn" class="btn btn-clear-winners">🗑️ Clear History</button>
             </div>
         </div>
     </div>
