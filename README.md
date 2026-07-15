@@ -57,8 +57,6 @@ python run.py
 
 Open http://localhost:5000
 
-Set `DB_DIR` environment variable to control where the SQLite database is stored (default: `/data`).
-
 ## Configuration
 
 | Variable | Default | Description |
@@ -70,10 +68,10 @@ Set `DB_DIR` environment variable to control where the SQLite database is stored
 
 Mount custom `.wav` files without rebuilding the container by uncommenting these volumes in `docker-compose.yml`:
 
-| Volume | Purpose |
-|--------|---------|
-| `./app/static/music:/app/app/static/music` | Spin music (played during wheel animation) |
-| `./app/static/cheers:/app/app/static/cheers` | Victory cheers (played on winner reveal) |
+| Host path | Container path | Purpose |
+|-----------|----------------|---------|
+| `./app/static/music` | `/app/app/static/music` | Spin music (played during wheel animation) |
+| `./app/static/cheers` | `/app/app/static/cheers` | Victory cheers (played on winner reveal) |
 
 Place your `.wav` files directly in the host directories (e.g. `./app/static/music/`).
 
