@@ -22,6 +22,7 @@ services:
       - DB_DIR=/data
       # ⚠️ CHANGE THIS before deploying to a shared network
       - ADMIN_PASSWORD=setadminpass
+      - SITE_TITLE=Wheel of Doom(b)
 
 volumes:
   wheel-data:

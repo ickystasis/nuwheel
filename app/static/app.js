@@ -54,7 +54,8 @@ async function showRecentPopup(watcherId, anchorBtn, nameInput, title, pointsInp
     recent.forEach(movie => {
         const item = document.createElement('div');
         item.className = 'recent-movie-item';
-        item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
+        const dateHtml = movie.last_seen ? `<span class="recent-movie-date">${escHtml(movie.last_seen)}</span>` : '';
+        item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>${dateHtml}`;
         item.addEventListener('mousedown', (e) => {
             e.preventDefault();
             if (popupBlurTimer) {
@@ -192,15 +193,10 @@ async function fetchSettings() {
             activeIds = new Set(settings.active_ids);
         }
         if (settings.spin_settings) {
-            spinSettings.duration = settings.spin_settings.duration ?? spinSettings.duration;
-            spinSettings.decelSharpness = settings.spin_settings.decelSharpness ?? spinSettings.decelSharpness;
-            spinSettings.finalCrawl = settings.spin_settings.finalCrawl ?? spinSettings.finalCrawl;
-            if (velocitySlider) velocitySlider.value = spinSettings.duration;
-            if (velocityValue) velocityValue.textContent = spinSettings.duration.toFixed(2);
-            if (frictionGainSlider) frictionGainSlider.value = spinSettings.decelSharpness;
-            if (frictionGainValue) frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
-            if (finalStretchSlider) finalStretchSlider.value = spinSettings.finalCrawl;
-            if (finalStretchValue) finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
+            // spin settings are persisted but no longer have a UI
+        }
+        if (settings.site_title) {
+            document.title = settings.site_title;
         }
         if (settings.center_image) {
             const img = new Image();
@@ -224,19 +220,10 @@ const totalWeight = document.getElementById('totalWeight');
 const wheelInfo = document.getElementById('wheelInfo');
 const winnersBtn = document.getElementById('winnersBtn');
 const shuffleBtn = document.getElementById('shuffleBtn');
-const spinControlsBtn = document.getElementById('spinControlsBtn');
-const spinSettingsModal = document.getElementById('spinSettingsModal');
-const spinSettingsCloseBtn = document.getElementById('spinSettingsCloseBtn');
-const velocitySlider = document.getElementById('velocitySlider');
-const frictionGainSlider = document.getElementById('frictionGainSlider');
-const finalStretchSlider = document.getElementById('finalStretchSlider');
-const velocityValue = document.getElementById('velocityValue');
-const frictionGainValue = document.getElementById('frictionGainValue');
-const finalStretchValue = document.getElementById('finalStretchValue');
 const winnersModal = document.getElementById('winnersModal');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
 const winnersList = document.getElementById('winnersList');
-const clearWinnersBtn = document.getElementById('clearWinnersBtn');
+
 const statsBtn = document.getElementById('statsBtn');
 const statsBody = document.getElementById('statsBody');
 
@@ -257,11 +244,6 @@ const addNewWatcherBtn = document.getElementById('addNewWatcherBtn');
 const startMovieNightBtn = document.getElementById('startMovieNightBtn');
 const bypassChecksInput = document.getElementById('bypassChecks');
 let bypassPointChecks = false;
-let spinSettings = {
-    duration: parseFloat(velocitySlider?.value) || 1.1,
-    decelSharpness: parseFloat(frictionGainSlider?.value) || 0.45,
-    finalCrawl: parseFloat(finalStretchSlider?.value) || 0.35,
-};
 let centerImage = null; // uploaded center button image
 
 // Judgement refs
@@ -282,6 +264,13 @@ function applyWheelLock() {
     document.querySelectorAll('.point-step-btn').forEach(el => el.disabled = locked);
     document.querySelectorAll('.title-del-btn').forEach(el => el.disabled = locked);
     document.querySelectorAll('.add-title-btn').forEach(el => el.disabled = locked);
+    updatePanelVisibility();
+}
+
+function updatePanelVisibility() {
+    // Hide victim panel from spin start through winner display, show during voting
+    const hide = (isSpinning || !!lastWinnerInfo) && !showVoting;
+    document.querySelector('.left-column')?.classList.toggle('victim-panel-hidden', hide);
 }
 
 // Auth / Admin refs
@@ -1117,6 +1106,9 @@ function drawWheel(rotation) {
         const outerEdge = radius - pad;
         const textRadius = (innerEdge + outerEdge) / 2;
         const maxTextWidth = (outerEdge - innerEdge) * 0.92;
+        // Angular constraint: text width at textRadius must fit within the arc
+        const arcProportion = Math.max(0.35, Math.min(1.5, segments[i].points / totalPts * segments.length));
+        const angularSpace = arc * textRadius * 0.80;
 
         function wrapText(fontSize) {
             ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
@@ -1137,9 +1129,9 @@ function drawWheel(rotation) {
             return lines;
         }
 
-        let fontSize = Math.floor(wheelSize * 0.049);
+        let fontSize = Math.floor(wheelSize * 0.049 * arcProportion);
         let lines = wrapText(fontSize);
-        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > maxTextWidth))) {
+        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > Math.min(maxTextWidth, angularSpace)))) {
             fontSize -= 4;
             lines = wrapText(fontSize);
         }
@@ -1733,13 +1725,65 @@ function makeEditableField(value, onChange) {
     return span;
 }
 
+function populateProposerFilter() {
+    const sel = document.getElementById('filterProposer');
+    if (!sel) return;
+    const current = sel.value;
+    const names = [...new Set(winners.map(w => w.watcher_name).filter(Boolean))];
+    names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    sel.innerHTML = '<option value="all">All Proposers</option>' + names.map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('');
+    sel.value = current;
+}
+
 function renderWinnersList() {
+    const judgementEl = document.getElementById('filterJudgement');
+    const weightEl = document.getElementById('filterWeight');
+    const proposerEl = document.getElementById('filterProposer');
+    const searchEl = document.getElementById('filterSearch');
+    const resetBtn = document.getElementById('filterResetBtn');
+
+    // Show reset button only when a filter is active
+    if (resetBtn) {
+        const hasFilter = (judgementEl && judgementEl.value !== 'all') ||
+                          (weightEl && weightEl.value !== 'all') ||
+                          (proposerEl && proposerEl.value !== 'all') ||
+                          (searchEl && searchEl.value.trim() !== '');
+        resetBtn.classList.toggle('hidden', !hasFilter);
+    }
+
     winnersList.innerHTML = '';
     if (winners.length === 0) {
         winnersList.innerHTML = '<p class="empty-msg">No winners yet! Spin the wheel~ ✨</p>';
         return;
     }
-    for (const w of winners) {
+
+    populateProposerFilter();
+
+    const jFilter = judgementEl ? judgementEl.value : 'all';
+    const wFilter = weightEl ? weightEl.value : 'all';
+    const pFilter = proposerEl ? proposerEl.value : 'all';
+    const sFilter = searchEl ? searchEl.value.trim().toLowerCase() : '';
+
+    const filtered = winners.filter(w => {
+        if (jFilter === 'punish' && w.judgement !== 'punish') return false;
+        if (jFilter === 'not-punish' && w.judgement === 'punish') return false;
+        if (wFilter === '1') {
+            const budget = parseInt(w.watcher_budget) || 0;
+            const movieCount = parseInt(w.watcher_movie_count) || 0;
+            const isGold = w.weight == 1 && (budget === 0 || budget === 1) && (movieCount === 0 || movieCount === 1);
+            if (!isGold) return false;
+        }
+        if (pFilter !== 'all' && w.watcher_name !== pFilter) return false;
+        if (sFilter && !w.title_name.toLowerCase().includes(sFilter)) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        winnersList.innerHTML = '<p class="empty-msg">No winners match the current filters.</p>';
+        return;
+    }
+
+    for (const w of filtered) {
         const budget = parseInt(w.watcher_budget) || 0;
         const movieCount = parseInt(w.watcher_movie_count) || 0;
         const isGold = w.weight == 1 && (budget === 0 || budget === 1) && (movieCount === 0 || movieCount === 1);
@@ -1972,6 +2016,7 @@ function renderWinnersList() {
         statusBtn.className = 'status-toggle-btn';
         statusBtn.textContent = w.status === 'disabled' ? 'Disabled' : 'Active';
         statusBtn.addEventListener('click', async () => {
+            if (!isAuthenticated()) return;
             const next = w.status === 'disabled' ? 'active' : 'disabled';
             try {
                 await fetch(`/api/winners/${w.id}/status`, {
@@ -1992,6 +2037,15 @@ function renderWinnersList() {
 }
 
 function openWinnersModal() {
+    // Reset filters to defaults
+    const jEl = document.getElementById('filterJudgement');
+    const wEl = document.getElementById('filterWeight');
+    const pEl = document.getElementById('filterProposer');
+    const sEl = document.getElementById('filterSearch');
+    if (jEl) jEl.value = 'all';
+    if (wEl) wEl.value = 'all';
+    if (pEl) pEl.value = 'all';
+    if (sEl) sEl.value = '';
     renderWinnersList();
     winnersModal.classList.remove('hidden');
 }
@@ -2399,34 +2453,6 @@ startMovieNightBtn.addEventListener('click', async () => {
     renderAll();
 });
 shuffleBtn.addEventListener('click', shuffleWheel);
-spinControlsBtn.addEventListener('click', () => {
-    spinSettingsModal.classList.remove('hidden');
-});
-spinSettingsCloseBtn.addEventListener('click', () => {
-    spinSettingsModal.classList.add('hidden');
-});
-spinSettingsModal.addEventListener('click', (e) => {
-    if (e.target === spinSettingsModal) spinSettingsModal.classList.add('hidden');
-});
-function saveSpinSettings() {
-    saveSettings({ spin_settings: { ...spinSettings } });
-}
-
-velocitySlider.addEventListener('input', () => {
-    spinSettings.duration = parseFloat(velocitySlider.value);
-    velocityValue.textContent = spinSettings.duration.toFixed(2);
-    saveSpinSettings();
-});
-frictionGainSlider.addEventListener('input', () => {
-    spinSettings.decelSharpness = parseFloat(frictionGainSlider.value);
-    frictionGainValue.textContent = spinSettings.decelSharpness.toFixed(2);
-    saveSpinSettings();
-});
-finalStretchSlider.addEventListener('input', () => {
-    spinSettings.finalCrawl = parseFloat(finalStretchSlider.value);
-    finalStretchValue.textContent = spinSettings.finalCrawl.toFixed(2);
-    saveSpinSettings();
-});
 bypassChecksInput.addEventListener('change', () => {
     bypassPointChecks = bypassChecksInput.checked;
 });
@@ -2605,13 +2631,6 @@ debtMatrixModal.addEventListener('click', (e) => {
     if (e.target === debtMatrixModal) closeDebtMatrix();
 });
 
-clearWinnersBtn.addEventListener('click', async () => {
-    if (winners.length === 0) return;
-    if (!confirm('⚠️ This will permanently delete ALL winner history. Are you sure?')) return;
-    await clearAllWinners();
-    renderWinnersList();
-});
-
 importWinnersBtn.addEventListener('click', () => {
     importWinnersText.value = '';
     importWinnersText.disabled = false;
@@ -2619,6 +2638,23 @@ importWinnersBtn.addEventListener('click', () => {
     importStatus.textContent = '';
     importWinnersModal.classList.remove('hidden');
     setTimeout(() => importWinnersText.focus(), 200);
+});
+
+// Winners filter dropdowns
+document.getElementById('filterJudgement')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterWeight')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterProposer')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterSearch')?.addEventListener('input', renderWinnersList);
+document.getElementById('filterResetBtn')?.addEventListener('click', () => {
+    const jEl = document.getElementById('filterJudgement');
+    const wEl = document.getElementById('filterWeight');
+    const pEl = document.getElementById('filterProposer');
+    const sEl = document.getElementById('filterSearch');
+    if (jEl) jEl.value = 'all';
+    if (wEl) wEl.value = 'all';
+    if (pEl) pEl.value = 'all';
+    if (sEl) sEl.value = '';
+    renderWinnersList();
 });
 
 importWinnersCloseBtn.addEventListener('click', () => importWinnersModal.classList.add('hidden'));

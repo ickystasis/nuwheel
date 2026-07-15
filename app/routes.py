@@ -208,6 +208,7 @@ def get_settings():
                 settings[key] = val
         else:
             settings[key] = val
+    settings['site_title'] = current_app.config.get('SITE_TITLE', 'Wheel of Doom(b)')
     return jsonify(settings)
 
 
@@ -324,22 +325,67 @@ def update_watcher_color(watcher_id):
 
 @bp.route('/watchers/<int:watcher_id>/recent-movies', methods=['GET'])
 def recent_movies(watcher_id):
-    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun.
-
-    Based on winner history so it survives across sessions and browsers.
+    """Return up to 10 distinct movie names (with last-used points and date) that this watcher has
+    previously spun, lost on the wheel, or archived. Pulls from wheel_movies (all spins),
+    archived titles, and winner history — so removed movies can be quickly re-added.
     """
     db = get_db(current_app)
     watcher = db.execute('SELECT name FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
     if not watcher:
         return jsonify({'error': 'Watcher not found'}), 404
 
-    rows = db.execute(
-        'SELECT title_name, weight FROM winners '
-        'WHERE watcher_name = ? '
-        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 10',
-        (watcher['name'],)
+    # Track latest date per movie: {lower_name: {name, points, last_seen}}
+    entries = {}
+    name = watcher['name']
+
+    def _consider(movie_name, points, date_str):
+        key = movie_name.lower()
+        if key not in entries or (date_str and date_str > entries[key].get('last_seen', '')):
+            entries[key] = {'name': movie_name, 'points': points, 'last_seen': date_str or ''}
+
+    # 1. Wheel losses — movies this watcher had on the wheel during any spin (even when others won)
+    wheel_rows = db.execute(
+        'SELECT wheel_movies, won_at FROM winners '
+        'WHERE wheel_movies IS NOT NULL AND wheel_movies != \'{}\' AND wheel_movies != \'\' '
+        'AND won_at IS NOT NULL '
+        'ORDER BY won_at DESC LIMIT 100'
     ).fetchall()
-    return jsonify([{'name': r['title_name'], 'points': r['weight']} for r in rows])
+    for row in wheel_rows:
+        try:
+            wm = json.loads(row['wheel_movies'])
+            if name in wm:
+                for movie in wm[name]:
+                    _consider(movie['name'], movie.get('weight', 1), row['won_at'])
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    # 2. Archived titles — movies this watcher removed from the wheel
+    archived = db.execute(
+        'SELECT name, points, created_at FROM titles '
+        'WHERE watcher_id = ? AND archived = 1 '
+        'ORDER BY id DESC LIMIT 20',
+        (watcher_id,)
+    ).fetchall()
+    for r in archived:
+        _consider(r['name'], r['points'], r['created_at'])
+
+    # 3. Winner history — movies this watcher won with
+    rows = db.execute(
+        'SELECT title_name, weight, won_at FROM winners '
+        'WHERE watcher_name = ? '
+        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 20',
+        (name,)
+    ).fetchall()
+    for r in rows:
+        _consider(r['title_name'], r['weight'], r['won_at'])
+
+    # Sort by last_seen descending, take top 10
+    sorted_results = sorted(entries.values(), key=lambda x: x.get('last_seen', '') or '', reverse=True)[:10]
+    # Trim last_seen to date-only for display
+    for r in sorted_results:
+        if r.get('last_seen') and len(r['last_seen']) >= 10:
+            r['last_seen'] = r['last_seen'][:10]
+    return jsonify(sorted_results)
 
 
 @bp.route('/titles', methods=['POST'])
