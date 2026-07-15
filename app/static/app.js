@@ -37,8 +37,7 @@ function positionRecentPopup(anchorBtn) {
     recentPopupEl.style.top = top + 'px';
 }
 
-async function showRecentPopup(watcherId, anchorBtn) {
-    if (popupWatcherId === watcherId && !recentPopupEl.classList.contains('hidden')) return;
+async function showRecentPopup(watcherId, anchorBtn, nameInput, title, pointsInput) {
     hideRecentPopupEl();
 
     let recent = [];
@@ -50,33 +49,28 @@ async function showRecentPopup(watcherId, anchorBtn) {
     if (recent.length === 0) return;
 
     popupWatcherId = watcherId;
-    recentPopupEl.dataset.watcherId = watcherId;
     recentPopupEl.innerHTML = '';
 
     recent.forEach(movie => {
         const item = document.createElement('div');
         item.className = 'recent-movie-item';
         item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
-        item.addEventListener('mousedown', async (e) => {
+        item.addEventListener('mousedown', (e) => {
             e.preventDefault();
             if (popupBlurTimer) {
                 clearTimeout(popupBlurTimer);
                 popupBlurTimer = null;
             }
-            // Blur the active input so the socket handler doesn't skip re-render
-            if (document.activeElement && document.activeElement.blur) {
-                document.activeElement.blur();
-            }
             hideRecentPopupEl();
-            const res = await fetch('/api/titles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ watcher_id: watcherId, name: movie.name, points: movie.points }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                showError(err.error || 'Failed to add movie');
-            }
+
+            // Fill the blank row's inputs and trigger the normal save flow
+            nameInput.value = movie.name;
+            title.name = movie.name;
+            title.points = movie.points;
+            nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            pointsInput.value = movie.points;
+            pointsInput.dispatchEvent(new Event('input', { bubbles: true }));
         });
         recentPopupEl.appendChild(item);
     });
@@ -873,7 +867,11 @@ function createTitleRow(watcher, title, index) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ watcher_id: watcher.id, name, points: pts }),
                     });
-                    if (!res.ok) return;
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        showError(err.error || 'Failed to add movie');
+                        return;
+                    }
                     const created = await res.json();
                     title.id = created.id; // swap temp string ID for real numeric ID
                     title.name = name;
@@ -912,7 +910,7 @@ function createTitleRow(watcher, title, index) {
         if (!nameInput.value.trim() && typeof watcher.id === 'number') {
             const card = nameInput.closest('.watcher-card');
             const btn = card && card.querySelector('.add-title-btn');
-            if (btn) showRecentPopup(watcher.id, btn);
+            if (btn) showRecentPopup(watcher.id, btn, nameInput, title, pointsInput);
         }
     });
 

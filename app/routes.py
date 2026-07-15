@@ -145,7 +145,7 @@ def get_data():
     name_map = {w['id']: w['name'] for w in watchers}
     for w in watchers:
         titles = db.execute(
-            'SELECT id, name, points, display_order FROM titles WHERE watcher_id = ? AND archived = 0 ORDER BY display_order ASC',
+            'SELECT id, name, points, display_order FROM titles WHERE watcher_id = ? AND archived = 0 ORDER BY id ASC',
             (w['id'],)
         ).fetchall()
         # Debt breakdown for tooltip (only present watchers)

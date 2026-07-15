@@ -54,7 +54,8 @@
 - Deleting a movie now archives it server-side instead of permanent deletion (can be restored later)
 - Clicking "Add movie" creates an empty row and focuses it
 - Focusing an empty title input shows a popup of the last 10 movies that watcher has previously spun (from winner history), positioned to the right of the victims panel and vertically centered on the button
-- Clicking a movie in the popup creates a new title row with that name and points
+- Clicking a movie in the popup fills the existing blank row's inputs with that name and points and triggers save (no separate POST)
+- Titles returned in creation order (id ASC) so new entries always appear at the bottom of the victim list
 - Popup hides when typing or on blur (200ms delay to allow clicking popup items)
 - Archived movies and recent-movies list work across browsers — no cookies needed
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
