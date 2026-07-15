@@ -873,13 +873,13 @@ function createTitleRow(watcher, title, index) {
                         return;
                     }
                     const created = await res.json();
-                    title.id = created.id; // swap temp string ID for real numeric ID
+                    title.id = created.id;
                     title.name = name;
                     title.points = pts;
                     computeSegments();
                     drawWheel(wheelRotation);
                     updateWheelInfo();
-                    if (shouldRefresh) refreshWatchersPreservingFocus();
+                    refreshWatchersPreservingFocus();
                     if (!showVoting) spinBtn.disabled = segments.length === 0;
                 } catch (e) {}
             }
