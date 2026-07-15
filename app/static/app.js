@@ -1321,6 +1321,7 @@ async function acceptResults() {
             participantIds: participantIds,
             participantNames: participantNames,
             wheelRotation: wheelRotation,
+            segmentOrder: segments.map(s => `${s.name}|${s.watcherName}`),
         }));
         fetchWinners();
     }
@@ -2689,6 +2690,17 @@ canvas.addEventListener('mousemove', (e) => {
             const winnerRecord = winners.find(x => x.id == info.winnerRecordId);
             if (winnerRecord && !winnerRecord.judgement) {
                 stopIdleSpin();
+
+                // Restore segment draw order to match the spin's state
+                if (info.segmentOrder) {
+                    const orderMap = new Map(info.segmentOrder.map((k, i) => [k, i]));
+                    segments.sort((a, b) => {
+                        const ka = `${a.name}|${a.watcherName}`;
+                        const kb = `${b.name}|${b.watcherName}`;
+                        return (orderMap.get(ka) ?? Infinity) - (orderMap.get(kb) ?? Infinity);
+                    });
+                }
+
                 lastWinnerInfo = {
                     seg: { name: info.titleName, watcherName: info.watcherName, points: info.points },
                     totalPts: info.totalPts,
