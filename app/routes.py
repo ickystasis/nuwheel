@@ -77,12 +77,12 @@ def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
         return points
     if exclude_title_id:
         other_total = db.execute(
-            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ? AND id != ?',
+            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ? AND id != ? AND archived = 0',
             (watcher_id, exclude_title_id)
         ).fetchone()['t']
     else:
         other_total = db.execute(
-            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ?',
+            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ? AND archived = 0',
             (watcher_id,)
         ).fetchone()['t']
     personal_budget = max(1, watcher['points'])
@@ -93,8 +93,8 @@ def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
 
 
 def reshuffle_title_order(db):
-    """Randomize display_order for all titles so no one user's titles are clumped."""
-    rows = db.execute('SELECT id FROM titles ORDER BY id').fetchall()
+    """Randomize display_order for all non-archived titles so no one user's titles are clumped."""
+    rows = db.execute('SELECT id FROM titles WHERE archived = 0 ORDER BY id').fetchall()
     ids = [r['id'] for r in rows]
     random.shuffle(ids)
     for i, tid in enumerate(ids):
@@ -145,7 +145,7 @@ def get_data():
     name_map = {w['id']: w['name'] for w in watchers}
     for w in watchers:
         titles = db.execute(
-            'SELECT id, name, points, display_order FROM titles WHERE watcher_id = ? ORDER BY display_order ASC',
+            'SELECT id, name, points, display_order FROM titles WHERE watcher_id = ? AND archived = 0 ORDER BY id ASC',
             (w['id'],)
         ).fetchall()
         # Debt breakdown for tooltip (only present watchers)
@@ -322,22 +322,67 @@ def update_watcher_color(watcher_id):
 
 # ── Titles ──
 
+@bp.route('/watchers/<int:watcher_id>/recent-movies', methods=['GET'])
+def recent_movies(watcher_id):
+    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun.
+
+    Based on winner history so it survives across sessions and browsers.
+    """
+    db = get_db(current_app)
+    watcher = db.execute('SELECT name FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
+    if not watcher:
+        return jsonify({'error': 'Watcher not found'}), 404
+
+    rows = db.execute(
+        'SELECT title_name, weight FROM winners '
+        'WHERE watcher_name = ? '
+        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 10',
+        (watcher['name'],)
+    ).fetchall()
+    return jsonify([{'name': r['title_name'], 'points': r['weight']} for r in rows])
+
+
 @bp.route('/titles', methods=['POST'])
 def add_title():
-    """Add a title to a watcher (max 3 per watcher)."""
+    """Add a title to a watcher (max 3 per watcher).
+
+    When called without a name, restores the most recently archived title
+    for the watcher if one exists.
+    """
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
-    name = data.get('name', '').strip()
-    if not name:
-        return jsonify({'error': 'Title name is required'}), 400
-    if len(name) > 200:
-        return jsonify({'error': 'Title too long (max 200 chars)'}), 400
-
     watcher_id = data.get('watcher_id')
     if not watcher_id:
         return jsonify({'error': 'watcher_id is required'}), 400
+
+    db = get_db(current_app)
+
+    name = data.get('name', '').strip()
+
+    # Only auto-restore archived when no name was provided
+    if not name:
+        archived = db.execute(
+            'SELECT id, name, points FROM titles WHERE watcher_id = ? AND archived = 1 ORDER BY id DESC LIMIT 1',
+            (watcher_id,)
+        ).fetchone()
+
+        if archived:
+            db.execute('UPDATE titles SET archived = 0, created_at = datetime(\'now\') WHERE id = ?',
+                       (archived['id'],))
+            reshuffle_title_order(db)
+            db.commit()
+            socketio.emit('data_changed', {})
+            row = db.execute('SELECT id, watcher_id, name, points FROM titles WHERE id = ?',
+                             (archived['id'],)).fetchone()
+            return jsonify(dict(row)), 201
+
+        return jsonify({'error': 'Title name is required'}), 400
+
+    # A name was provided — create new title (don't auto-restore)
+    if len(name) > 200:
+        return jsonify({'error': 'Title too long (max 200 chars)'}), 400
 
     try:
         points = float(data.get('points', 1))
@@ -346,10 +391,8 @@ def add_title():
     if points < 0.1:
         return jsonify({'error': 'Points must be at least 0.1'}), 400
 
-    db = get_db(current_app)
-
     count = db.execute(
-        'SELECT COUNT(*) as c FROM titles WHERE watcher_id = ?', (watcher_id,)
+        'SELECT COUNT(*) as c FROM titles WHERE watcher_id = ? AND archived = 0', (watcher_id,)
     ).fetchone()['c']
     if count >= 3:
         return jsonify({'error': 'Maximum 3 titles per watcher'}), 409
@@ -414,9 +457,9 @@ def shuffle_titles():
 
 @bp.route('/titles/<int:title_id>', methods=['DELETE'])
 def delete_title(title_id):
-    """Remove a title."""
+    """Soft-delete a title (archive it). It can be restored later."""
     db = get_db(current_app)
-    db.execute('DELETE FROM titles WHERE id = ?', (title_id,))
+    db.execute('UPDATE titles SET archived = 1, created_at = datetime(\'now\') WHERE id = ?', (title_id,))
     reshuffle_title_order(db)
     db.commit()
     socketio.emit('data_changed', {})

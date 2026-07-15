@@ -298,6 +298,34 @@ body {
     margin-left: 25px;
 }
 
+.left-column.wheel-locked .title-input,
+.left-column.wheel-locked .title-points,
+.left-column.wheel-locked .point-step-btn,
+.left-column.wheel-locked .title-del-btn,
+.left-column.wheel-locked .add-title-btn {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Auth lock — dim protected controls when not authenticated */
+body.auth-locked .action-btn,
+body.auth-locked #shuffleBtn,
+body.auth-locked .vote-toggle,
+body.auth-locked .editable-field,
+body.auth-locked .main-layout .title-input,
+body.auth-locked .main-layout .title-points,
+body.auth-locked .main-layout .point-step-btn,
+body.auth-locked .main-layout .title-del-btn,
+body.auth-locked .main-layout .add-title-btn,
+body.auth-locked .main-layout .watcher-del-btn,
+body.auth-locked label[for="centerImageInput"] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+body.auth-locked .cell-editable {
+    opacity: 0.4;
+}
+
 .wheel-panel {
     text-align: center;
     display: flex;
@@ -672,6 +700,46 @@ body {
 .add-title-btn:hover {
     background: rgba(78, 205, 196, 0.18);
     transform: translateY(-1px);
+}
+
+/* Recent movies popup (fixed, right of victims panel) */
+.recent-movies-popup {
+    position: fixed;
+    background: #1e1e36;
+    border: 1px solid #3a3a5a;
+    border-radius: 10px;
+    padding: 0.4rem 0;
+    min-width: 280px;
+    max-width: 360px;
+    max-height: 60vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 1000;
+}
+
+.recent-movie-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.85rem;
+}
+
+.recent-movie-item:hover {
+    background: rgba(78, 205, 196, 0.12);
+}
+
+.recent-movie-name {
+    color: #e0e0e0;
+    font-weight: 600;
+}
+
+.recent-movie-pts {
+    color: #ffd93d;
+    font-weight: 700;
+    margin-left: 0.75rem;
 }
 
 .balance-box {

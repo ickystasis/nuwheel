@@ -1,6 +1,20 @@
 # Changelog
 
-## [unreleased]
+## [1.8.0] - 2026-07-14
+
+### Password Protection
+- Lock/Unlock button replaces exposed admin button — settings, wheel spin, edits, and votes require password re-entry on each page load
+- Auth persisted via 10-year cookie (`wheel_auth=1`) so you don't need to re-enter every visit
+- All protected controls (victim panel edits, spin, vote toggles, debt cells, center image, admin panel) dim when locked; tooltips on debt cells remain visible
+- `ADMIN_PASSWORD` env var reused for the new lock system
+
+### Wheel Lock
+- Victim/movie/points editing disabled during spin, voting, and winner-pending states to prevent mid-round corruption
+- `wheelLocked()` guard applied to all title mutations, plus/minus buttons, remove-from-session, and add-watcher buttons
+
+### Bug Fixes
+- Wheel recovery now saves `segmentOrder` alongside `wheelRotation` so restored spins draw segments in the correct order (previously shifted after page reload due to `display_order` changes)
+- Debt matrix diagonal cells (same debtor/creditor) no longer show a tooltip
 
 ## [1.7.0] - 2026-07-14
 
@@ -49,7 +63,17 @@
 - `backdrop-filter: blur(4px)` removed from `.modal-overlay` for OBS compatibility
 
 ### Bug Fixes
+- Fixed internal nginx listening on port 443 instead of 9642 (mismatch with docker-compose port mapping)
 - Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
+
+### Movie Archive & Recent Movies Popup
+- Deleting a movie now archives it server-side instead of permanent deletion (can be restored later)
+- Clicking "Add movie" creates an empty row and focuses it
+- Focusing an empty title input shows a popup of the last 10 movies that watcher has previously spun (from winner history), positioned to the right of the victims panel and vertically centered on the button
+- Clicking a movie in the popup fills the existing blank row's inputs with that name and points and triggers save (no separate POST)
+- Titles returned in creation order (id ASC) so new entries always appear at the bottom of the victim list
+- Popup hides when typing or on blur (200ms delay to allow clicking popup items)
+- Archived movies and recent-movies list work across browsers — no cookies needed
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
 - Fixed Docker build not picking up file changes on Windows (use `--build` flag)
