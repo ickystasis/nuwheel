@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.9.0] - 2026-07-15
+## [1.8.1] - 2026-07-15
 
 ### Recent Movies Popup
 - Recent movies popup now surfaces movies from three sources: wheel losses (movies the watcher had on the wheel during any spin, even when others won), archived titles (movies removed from the wheel), and winner history — making it easy to re-add previously removed movies
@@ -10,15 +10,28 @@
 ### Victim Panel Visibility
 - Victim panel auto-hides during wheel spin and winner display, reappears when voting phase starts — puts focus on the wheel during the spin
 - Button bar remains visible at all times
+- All CSS transitions removed from victim panel controls (+/-, delete, inputs, add-title) for instant response
 
 ### UI Cleanup
 - Spin Settings button (⚙️) and modal removed — the sliders had no effect on wheel physics
 - Lock/Unlock button (🔒) moved to always be the rightmost button in the toolbar
-- Clear History button removed from Previous Winners modal (was useful during testing, no longer needed in deployment)
+- Clear History button removed from Previous Winners modal
 
 ### Wheel Text Scaling
 - Segment text starting font size now scales with segment arc size — smaller tiles get proportionally smaller text
 - Angular constraint added: text width at the text radius must also fit within the segment's arc, preventing overlap into neighboring tiles
+
+### Winners Modal Filters
+- Three dropdown filters added: Judgement (All/Punished/Not Punished), Weight (All/True 1-Weight), Proposer (All/per-watcher)
+- Title search bar with live filtering as you type
+- Reset button appears only when a filter is active
+- All filters combine with AND logic; filters reset when modal opens
+- Winners modal width increased to 760px to fit the full filter bar
+- Status toggle (Active/Disabled) now requires admin password
+
+### Configuration
+- `SITE_TITLE` environment variable added to customize the browser tab title (default: Wheel of Doom(b))
+- README Configuration and Audio Volume Mounts tables reformatted for clarity
 
 ## [1.8.0] - 2026-07-14
 
