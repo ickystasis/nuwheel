@@ -2,6 +2,20 @@
 
 ## [unreleased]
 
+### Password Protection
+- Lock/Unlock button replaces exposed admin button — settings, wheel spin, edits, and votes require password re-entry on each page load
+- Auth persisted via 10-year cookie (`wheel_auth=1`) so you don't need to re-enter every visit
+- All protected controls (victim panel edits, spin, vote toggles, debt cells, center image, admin panel) dim when locked; tooltips on debt cells remain visible
+- `ADMIN_PASSWORD` env var reused for the new lock system
+
+### Wheel Lock
+- Victim/movie/points editing disabled during spin, voting, and winner-pending states to prevent mid-round corruption
+- `wheelLocked()` guard applied to all title mutations, plus/minus buttons, remove-from-session, and add-watcher buttons
+
+### Bug Fixes
+- Wheel recovery now saves `segmentOrder` alongside `wheelRotation` so restored spins draw segments in the correct order (previously shifted after page reload due to `display_order` changes)
+- Debt matrix diagonal cells (same debtor/creditor) no longer show a tooltip
+
 ### Verdict Messages
 - Punish/pass/abort messages now persist on screen until the next spin (instead of auto-dismissing after 2-2.5s)
 - Punish message shows per-user breakdown: `2 added to David (5 total)`, one line per user

@@ -284,7 +284,8 @@ function applyWheelLock() {
     document.querySelectorAll('.add-title-btn').forEach(el => el.disabled = locked);
 }
 
-// Admin refs
+// Auth / Admin refs
+const lockBtn = document.getElementById('lockBtn');
 const adminBtn = document.getElementById('adminBtn');
 const adminModal = document.getElementById('adminModal');
 const adminCloseBtn = document.getElementById('adminCloseBtn');
@@ -314,7 +315,49 @@ const passwordInput = document.getElementById('passwordInput');
 const passwordSubmitBtn = document.getElementById('passwordSubmitBtn');
 const passwordCancelBtn = document.getElementById('passwordCancelBtn');
 
-function verifyAdminPassword() {
+// Auth helpers — cookie-based password protection
+function isAuthenticated() {
+    return document.cookie.split('; ').some(c => c.startsWith('wheel_auth=1'));
+}
+function setAuthCookie() {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 10);
+    document.cookie = `wheel_auth=1; path=/; expires=${d.toUTCString()}`;
+}
+function clearAuthCookie() {
+    document.cookie = 'wheel_auth=1; path=/; max-age=0';
+}
+async function authLogin(password) {
+    try {
+        const res = await fetch('/api/admin/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            setAuthCookie();
+            applyAuthLock();
+            return true;
+        }
+        return false;
+    } catch {
+        return false;
+    }
+}
+function applyAuthLock() {
+    const authed = isAuthenticated();
+    document.body.classList.toggle('auth-locked', !authed);
+    document.getElementById('adminBtn')?.classList.toggle('hidden', !authed);
+    const lockBtn = document.getElementById('lockBtn');
+    if (lockBtn) {
+        lockBtn.textContent = authed ? '🔓' : '🔒';
+        lockBtn.title = authed ? 'Lock settings' : 'Unlock settings';
+    }
+}
+
+async function verifyAdminPassword() {
+    if (isAuthenticated()) return true;
     return new Promise((resolve) => {
         passwordInput.value = '';
         passwordModal.classList.remove('hidden');
@@ -339,6 +382,10 @@ function verifyAdminPassword() {
                     body: JSON.stringify({ password: pw }),
                 });
                 const data = await res.json();
+                if (data.ok) {
+                    setAuthCookie();
+                    applyAuthLock();
+                }
                 resolve(data.ok);
                 if (!data.ok) alert('Incorrect password!');
             } catch {
@@ -544,6 +591,7 @@ function renderParticipantList() {
         cb.className = 'participant-check';
         cb.checked = activeIds.has(w.id);
         cb.addEventListener('change', async () => {
+            if (!isAuthenticated()) { cb.checked = !cb.checked; return; }
             if (cb.checked) activeIds.add(w.id);
             else activeIds.delete(w.id);
             await saveSettings({ active_ids: [...activeIds] });
@@ -654,6 +702,7 @@ function renderWatchers() {
         delBtn.textContent = '✕';
         delBtn.title = 'Remove from session';
         delBtn.addEventListener('click', async () => {
+            if (!isAuthenticated()) return;
             if (wheelLocked()) return;
             activeIds.delete(w.id);
             await saveSettings({ active_ids: [...activeIds] });
@@ -761,6 +810,7 @@ function renderWatchers() {
                 voteBtn.className = `vote-toggle${vote === 'punish' ? ' vote-punish' : ''}`;
                 voteBtn.textContent = vote === 'punish' ? '👎 Punish' : '🤷 NA';
                 voteBtn.addEventListener('click', () => {
+                    if (!isAuthenticated()) return;
                     const newVote = watcherVotes[w.id] === 'punish' ? 'na' : 'punish';
                     watcherVotes[w.id] = newVote;
                     voteBtn.className = `vote-toggle${newVote === 'punish' ? ' vote-punish' : ''}`;
@@ -771,6 +821,7 @@ function renderWatchers() {
                 voteBtn.className = `vote-toggle${vote === 'punish' ? ' vote-punish' : ''}`;
                 voteBtn.textContent = vote === 'pass' ? '👍 Pass' : '👎 Punish';
                 voteBtn.addEventListener('click', () => {
+                    if (!isAuthenticated()) return;
                     const newVote = watcherVotes[w.id] === 'pass' ? 'punish' : 'pass';
                     watcherVotes[w.id] = newVote;
                     voteBtn.className = `vote-toggle${newVote === 'punish' ? ' vote-punish' : ''}`;
@@ -799,6 +850,7 @@ function renderWatchers() {
         addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
         addTitleBtn.textContent = '➕ Add movie';
         addTitleBtn.addEventListener('click', () => {
+            if (!isAuthenticated()) return;
             if (wheelLocked()) return;
             const newTitle = { id: null, name: '', points: 1 };
             w.titles.push(newTitle);
@@ -849,6 +901,7 @@ function createTitleRow(watcher, title, index) {
     let saveQueued = false;
     let saveNeedsRefresh = false;
     async function save() {
+        if (!isAuthenticated()) return;
         if (wheelLocked()) return;
         if (savePending) {
             saveQueued = true;
@@ -1310,6 +1363,7 @@ function onSpinComplete() {
 // ============================================================
 
 async function acceptResults() {
+    if (!isAuthenticated()) return;
     if (!lastWinnerInfo) return;
 
     // Lock spinning immediately — before any async work
@@ -1372,6 +1426,7 @@ async function acceptResults() {
 // ============================================================
 
 async function abortSession() {
+    if (!isAuthenticated()) return;
     if (!lastWinnerInfo) return;
     const winnerRecordId = lastWinnerInfo.winnerId;
     if (!winnerRecordId) {
@@ -1426,6 +1481,7 @@ async function abortSession() {
 // ============================================================
 
 async function renderVerdict() {
+    if (!isAuthenticated()) return;
     if (!lastWinnerInfo) return;
     const seg = lastWinnerInfo.seg;
     const active = getActiveWatchers();
@@ -1635,6 +1691,7 @@ function renderAll() {
 }
 
 async function shuffleWheel() {
+    if (!isAuthenticated()) return;
     if (isSpinning || segments.length === 0) return;
     // Shuffle locally — only affects wheel canvas, not panel title order
     for (let i = segments.length - 1; i > 0; i--) {
@@ -1653,6 +1710,7 @@ function makeEditableField(value, onChange) {
     span.textContent = value;
     span.className = 'editable-field';
     span.addEventListener('click', () => {
+        if (!isAuthenticated()) return;
         if (span.querySelector('input')) return;
         const inp = document.createElement('input');
         inp.type = 'text';
@@ -2096,12 +2154,13 @@ function renderDebtMatrix(data) {
         });
     });
 
-    // Tooltip for debt cells
+    // Tooltip for debt cells (skip diagonal — same person)
     const tooltip = document.getElementById('ptsTooltip');
     tbody.querySelectorAll('td').forEach(td => {
         const dId = td.dataset.d;
         const cId = td.dataset.c;
         if (!dId || !cId) return;
+        if (dId === cId) return;
         const debtor = watchers.find(w => w.id == dId);
         const creditor = watchers.find(w => w.id == cId);
         if (!debtor || !creditor) return;
@@ -2135,6 +2194,7 @@ function renderDebtMatrix(data) {
     // Make cells editable on click (admin-only check happens in save)
     tbody.querySelectorAll('td.cell-editable').forEach(td => {
         td.addEventListener('click', () => {
+            if (!isAuthenticated()) return;
             if (td.querySelector('input')) return; // already editing
             const orig = td.textContent.trim();
             const inp = document.createElement('input');
@@ -2306,6 +2366,7 @@ async function recordRetroVote() {
 
 // Image upload for center button (persisted server-side)
 document.getElementById('centerImageInput').addEventListener('change', (e) => {
+    if (!isAuthenticated()) return;
     const file = e.target.files[0];
     if (!file) return;
     const img = new Image();
@@ -2332,6 +2393,7 @@ participantsModal.addEventListener('click', (e) => {
     if (e.target === participantsModal) closeParticipantsModal();
 });
 startMovieNightBtn.addEventListener('click', async () => {
+    if (!isAuthenticated()) return;
     await saveSettings({ active_ids: [...activeIds] });
     closeParticipantsModal();
     renderAll();
@@ -2492,6 +2554,16 @@ async function openAdminModal() {
     adminModal.classList.remove('hidden');
 }
 
+lockBtn.addEventListener('click', async () => {
+    if (isAuthenticated()) {
+        clearAuthCookie();
+        applyAuthLock();
+    } else {
+        if (await verifyAdminPassword()) {
+            applyAuthLock();
+        }
+    }
+});
 adminBtn.addEventListener('click', openAdminModal);
 adminCloseBtn.addEventListener('click', () => adminModal.classList.add('hidden'));
 adminModal.addEventListener('click', (e) => {
@@ -2499,6 +2571,7 @@ adminModal.addEventListener('click', (e) => {
 });
 
 adminAddBtn.addEventListener('click', async () => {
+    if (!isAuthenticated()) return;
     if (wheelLocked()) return;
     const name = adminNewName.value.trim();
     if (!name) { alert('Enter a watcher name'); return; }
@@ -2686,6 +2759,7 @@ socket.on('winners_changed', () => {
 
 // Canvas: center circle click → SPIN
 canvas.addEventListener('click', (e) => {
+    if (!isAuthenticated()) return;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -2708,6 +2782,7 @@ canvas.addEventListener('mousemove', (e) => {
     await fetchData();
     await fetchWinners();
     renderAll();
+    applyAuthLock();
     startIdleSpin();
     requestAnimationFrame(() => requestAnimationFrame(resizeWheel));
 

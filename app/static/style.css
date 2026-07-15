@@ -307,6 +307,25 @@ body {
     cursor: not-allowed;
 }
 
+/* Auth lock — dim protected controls when not authenticated */
+body.auth-locked .action-btn,
+body.auth-locked #shuffleBtn,
+body.auth-locked .vote-toggle,
+body.auth-locked .editable-field,
+body.auth-locked .main-layout .title-input,
+body.auth-locked .main-layout .title-points,
+body.auth-locked .main-layout .point-step-btn,
+body.auth-locked .main-layout .title-del-btn,
+body.auth-locked .main-layout .add-title-btn,
+body.auth-locked .main-layout .watcher-del-btn,
+body.auth-locked label[for="centerImageInput"] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+body.auth-locked .cell-editable {
+    opacity: 0.4;
+}
+
 .wheel-panel {
     text-align: center;
     display: flex;
