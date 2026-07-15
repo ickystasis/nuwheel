@@ -310,7 +310,6 @@ body {
 .left-column.victim-panel-hidden {
     visibility: hidden;
     pointer-events: none;
-    transition: visibility 0.3s ease;
 }
 
 .left-column.victim-panel-hidden .add-section {
