@@ -1737,6 +1737,16 @@ function renderWinnersList() {
     const weightEl = document.getElementById('filterWeight');
     const proposerEl = document.getElementById('filterProposer');
     const searchEl = document.getElementById('filterSearch');
+    const resetBtn = document.getElementById('filterResetBtn');
+
+    // Show reset button only when a filter is active
+    if (resetBtn) {
+        const hasFilter = (judgementEl && judgementEl.value !== 'all') ||
+                          (weightEl && weightEl.value !== 'all') ||
+                          (proposerEl && proposerEl.value !== 'all') ||
+                          (searchEl && searchEl.value.trim() !== '');
+        resetBtn.classList.toggle('hidden', !hasFilter);
+    }
 
     winnersList.innerHTML = '';
     if (winners.length === 0) {
