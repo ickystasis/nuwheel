@@ -1,4 +1,4 @@
-# Wheel of Doom(b) 🎡
+# nuwheel 🎡
 
 A chaotic multiplayer movie-picking game where watchers add titles to a spinning wheel, allocate point budgets, spin to pick a winner, then vote to pass or punish. Points swing back and forth through a debt matrix — repeat punishes rack up escalating debts.
 
@@ -63,7 +63,7 @@ Open http://localhost:5000
 |----------|---------|-------------|
 | `DB_DIR` | `/data` | Directory for SQLite database |
 | `ADMIN_PASSWORD` | `setadminpass` | Password for the admin panel |
-| `SITE_TITLE` | `Wheel of Doom(b)` | Browser tab title |
+| `SITE_TITLE` | `nuwheel` | Browser tab title |
 
 ### Audio Volume Mounts
 
