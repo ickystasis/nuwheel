@@ -1210,6 +1210,7 @@ label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0
     padding: 0.5rem 1.5rem;
     border-bottom: 1px solid #2a2a3e;
     flex-wrap: wrap;
+    align-items: center;
 }
 
 #winnersFilterBar select {
@@ -1228,6 +1229,39 @@ label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0
 }
 
 #winnersFilterBar select:focus {
+    border-color: #4d96ff;
+}
+
+.btn-filter-reset {
+    background: none;
+    border: 1px solid #3a3a52;
+    border-radius: 6px;
+    color: #ff6b6b;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-filter-reset:hover {
+    background: rgba(255, 107, 107, 0.12);
+    border-color: #ff6b6b;
+}
+
+#filterSearch {
+    background: #16162a;
+    color: #e0e0e0;
+    border: 1px solid #3a3a52;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+    outline: none;
+    min-width: 120px;
+    flex: 0 1 160px;
+    margin-left: auto;
+}
+
+#filterSearch:focus {
     border-color: #4d96ff;
 }
 

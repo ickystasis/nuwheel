@@ -1736,6 +1736,7 @@ function renderWinnersList() {
     const judgementEl = document.getElementById('filterJudgement');
     const weightEl = document.getElementById('filterWeight');
     const proposerEl = document.getElementById('filterProposer');
+    const searchEl = document.getElementById('filterSearch');
 
     winnersList.innerHTML = '';
     if (winners.length === 0) {
@@ -1748,6 +1749,7 @@ function renderWinnersList() {
     const jFilter = judgementEl ? judgementEl.value : 'all';
     const wFilter = weightEl ? weightEl.value : 'all';
     const pFilter = proposerEl ? proposerEl.value : 'all';
+    const sFilter = searchEl ? searchEl.value.trim().toLowerCase() : '';
 
     const filtered = winners.filter(w => {
         if (jFilter === 'punish' && w.judgement !== 'punish') return false;
@@ -1759,6 +1761,7 @@ function renderWinnersList() {
             if (!isGold) return false;
         }
         if (pFilter !== 'all' && w.watcher_name !== pFilter) return false;
+        if (sFilter && !w.title_name.toLowerCase().includes(sFilter)) return false;
         return true;
     });
 
@@ -2024,9 +2027,11 @@ function openWinnersModal() {
     const jEl = document.getElementById('filterJudgement');
     const wEl = document.getElementById('filterWeight');
     const pEl = document.getElementById('filterProposer');
+    const sEl = document.getElementById('filterSearch');
     if (jEl) jEl.value = 'all';
     if (wEl) wEl.value = 'all';
     if (pEl) pEl.value = 'all';
+    if (sEl) sEl.value = '';
     renderWinnersList();
     winnersModal.classList.remove('hidden');
 }
@@ -2625,6 +2630,18 @@ importWinnersBtn.addEventListener('click', () => {
 document.getElementById('filterJudgement')?.addEventListener('change', renderWinnersList);
 document.getElementById('filterWeight')?.addEventListener('change', renderWinnersList);
 document.getElementById('filterProposer')?.addEventListener('change', renderWinnersList);
+document.getElementById('filterSearch')?.addEventListener('input', renderWinnersList);
+document.getElementById('filterResetBtn')?.addEventListener('click', () => {
+    const jEl = document.getElementById('filterJudgement');
+    const wEl = document.getElementById('filterWeight');
+    const pEl = document.getElementById('filterProposer');
+    const sEl = document.getElementById('filterSearch');
+    if (jEl) jEl.value = 'all';
+    if (wEl) wEl.value = 'all';
+    if (pEl) pEl.value = 'all';
+    if (sEl) sEl.value = '';
+    renderWinnersList();
+});
 
 importWinnersCloseBtn.addEventListener('click', () => importWinnersModal.classList.add('hidden'));
 importWinnersModal.addEventListener('click', (e) => {
