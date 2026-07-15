@@ -52,9 +52,10 @@
 
 ### Movie Archive & Recent Movies Popup
 - Deleting a movie now archives it server-side instead of permanent deletion (can be restored later)
-- Clicking "Add movie" shows a popup of the last 10 movies that watcher has previously spun (from winner history)
-- Clicking a movie in the popup creates a new title row pre-filled with that name and points
-- Popup closes when clicking outside or when typing in any title input
+- Clicking "Add movie" creates an empty row and focuses it
+- Focusing an empty title input shows a popup of the last 10 movies that watcher has previously spun (from winner history), positioned to the right of the victims panel and vertically centered on the button
+- Clicking a movie in the popup creates a new title row with that name and points
+- Popup hides when typing or on blur (200ms delay to allow clicking popup items)
 - Archived movies and recent-movies list work across browsers — no cookies needed
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)

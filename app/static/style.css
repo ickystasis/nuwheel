@@ -674,15 +674,19 @@ body {
     transform: translateY(-1px);
 }
 
-/* Recent movies popup */
+/* Recent movies popup (fixed, right of victims panel) */
 .recent-movies-popup {
+    position: fixed;
     background: #1e1e36;
     border: 1px solid #3a3a5a;
     border-radius: 10px;
     padding: 0.4rem 0;
-    margin-top: 0.5rem;
+    min-width: 280px;
+    max-width: 360px;
+    max-height: 60vh;
+    overflow-y: auto;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    z-index: 100;
+    z-index: 1000;
 }
 
 .recent-movie-item {

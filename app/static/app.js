@@ -7,13 +7,74 @@ let allWatchers = [];    // [{id, name, points, titles}]
 let activeIds = new Set(); // set of watcher IDs currently participating
 let segments = [];
 let isSpinning = false;
-let activeRecentPopup = null;
+const recentPopupEl = document.createElement('div');
+recentPopupEl.className = 'recent-movies-popup hidden';
+document.body.appendChild(recentPopupEl);
+let popupBlurTimer = null;
+let popupWatcherId = null;
 
-function closeRecentMoviesPopup() {
-    if (activeRecentPopup) {
-        activeRecentPopup.remove();
-        activeRecentPopup = null;
-    }
+function hideRecentPopupEl() {
+    recentPopupEl.classList.add('hidden');
+    recentPopupEl.innerHTML = '';
+    popupWatcherId = null;
+}
+
+function positionRecentPopup(anchorBtn) {
+    const btnRect = anchorBtn.getBoundingClientRect();
+    const popupHeight = recentPopupEl.offsetHeight;
+    const leftCol = document.querySelector('.left-column');
+    if (!leftCol) return;
+    const leftColRect = leftCol.getBoundingClientRect();
+
+    let left = leftColRect.right + 12;
+    let top = btnRect.top + btnRect.height / 2 - popupHeight / 2;
+
+    if (top < 8) top = 8;
+    const maxTop = window.innerHeight - popupHeight - 8;
+    if (top > maxTop) top = maxTop;
+
+    recentPopupEl.style.left = left + 'px';
+    recentPopupEl.style.top = top + 'px';
+}
+
+async function showRecentPopup(watcherId, anchorBtn) {
+    if (popupWatcherId === watcherId && !recentPopupEl.classList.contains('hidden')) return;
+    hideRecentPopupEl();
+
+    let recent = [];
+    try {
+        const res = await fetch(`/api/watchers/${watcherId}/recent-movies`);
+        if (res.ok) recent = await res.json();
+    } catch (_) {}
+
+    if (recent.length === 0) return;
+
+    popupWatcherId = watcherId;
+    recentPopupEl.dataset.watcherId = watcherId;
+    recentPopupEl.innerHTML = '';
+
+    recent.forEach(movie => {
+        const item = document.createElement('div');
+        item.className = 'recent-movie-item';
+        item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
+        item.addEventListener('mousedown', async (e) => {
+            e.preventDefault();
+            if (popupBlurTimer) {
+                clearTimeout(popupBlurTimer);
+                popupBlurTimer = null;
+            }
+            hideRecentPopupEl();
+            await fetch('/api/titles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ watcher_id: watcherId, name: movie.name, points: movie.points }),
+            });
+        });
+        recentPopupEl.appendChild(item);
+    });
+
+    recentPopupEl.classList.remove('hidden');
+    requestAnimationFrame(() => positionRecentPopup(anchorBtn));
 }
 let wheelRotation = 0;
 let animFrameId = null;
@@ -719,80 +780,14 @@ function renderWatchers() {
         const addTitleBtn = document.createElement('button');
         addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
         addTitleBtn.textContent = '➕ Add movie';
-        addTitleBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            closeRecentMoviesPopup();
+        addTitleBtn.addEventListener('click', () => {
+            const newTitle = { id: null, name: '', points: 1 };
+            w.titles.push(newTitle);
+            const row = createTitleRow(w, newTitle, w.titles.length - 1);
+            titlesContainer.appendChild(row);
             updateWheelInfo();
-
-            let recent = [];
-            try {
-                const res = await fetch(`/api/watchers/${w.id}/recent-movies`);
-                if (res.ok) recent = await res.json();
-            } catch (_) {}
-
-            if (recent.length === 0) {
-                const newTitle = { id: null, name: '', points: 1 };
-                w.titles.push(newTitle);
-                titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
-                updateWheelInfo();
-                return;
-            }
-
-            let rowCreated = false;
-            function ensureBlankRow() {
-                if (rowCreated) return;
-                rowCreated = true;
-                const newTitle = { id: null, name: '', points: 1 };
-                w.titles.push(newTitle);
-                titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
-                updateWheelInfo();
-            }
-
-            const popup = document.createElement('div');
-            popup.className = 'recent-movies-popup';
-            recent.forEach(movie => {
-                const item = document.createElement('div');
-                item.className = 'recent-movie-item';
-                item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
-                item.addEventListener('click', async () => {
-                    closeRecentMoviesPopup();
-                    const res = await fetch('/api/titles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ watcher_id: w.id, name: movie.name, points: movie.points }),
-                    });
-                    if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        showError(err.error || 'Failed to add movie');
-                        return;
-                    }
-                    const created = await res.json();
-                    w.titles.push(created);
-                    titlesContainer.appendChild(createTitleRow(w, created, w.titles.length - 1));
-                    updateWheelInfo();
-                });
-                popup.appendChild(item);
-            });
-            addTitleBtn.parentNode.insertBefore(popup, addTitleBtn.nextSibling);
-            activeRecentPopup = popup;
-
-            const outsideHandler = (ev) => {
-                if (activeRecentPopup && !activeRecentPopup.contains(ev.target) && ev.target !== addTitleBtn) {
-                    closeRecentMoviesPopup();
-                    document.removeEventListener('click', outsideHandler);
-                    ensureBlankRow();
-                }
-            };
-            setTimeout(() => document.addEventListener('click', outsideHandler), 0);
-
-            const typeHandler = () => {
-                if (activeRecentPopup) {
-                    closeRecentMoviesPopup();
-                    document.removeEventListener('input', typeHandler, true);
-                    ensureBlankRow();
-                }
-            };
-            document.addEventListener('input', typeHandler, true);
+            const nameInput = row.querySelector('.title-input');
+            if (nameInput) nameInput.focus();
         });
 
         card.appendChild(titlesContainer);
@@ -896,6 +891,29 @@ function createTitleRow(watcher, title, index) {
         clearTimeout(saveTimer);
         saveNeedsRefresh = false;
         saveTimer = setTimeout(save, 400);
+        if (!recentPopupEl.classList.contains('hidden') && nameInput.value.trim()) {
+            hideRecentPopupEl();
+        }
+    });
+
+    nameInput.addEventListener('focus', () => {
+        if (popupBlurTimer) {
+            clearTimeout(popupBlurTimer);
+            popupBlurTimer = null;
+        }
+        if (!nameInput.value.trim() && typeof watcher.id === 'number') {
+            const card = nameInput.closest('.watcher-card');
+            const btn = card && card.querySelector('.add-title-btn');
+            if (btn) showRecentPopup(watcher.id, btn);
+        }
+    });
+
+    nameInput.addEventListener('blur', () => {
+        if (popupBlurTimer) clearTimeout(popupBlurTimer);
+        popupBlurTimer = setTimeout(() => {
+            hideRecentPopupEl();
+            popupBlurTimer = null;
+        }, 200);
     });
 
     minusBtn.addEventListener('click', () => {
