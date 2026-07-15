@@ -270,6 +270,20 @@ const abortBtn = document.getElementById('abortBtn');
 const returnMsg = document.getElementById('returnMsg');
 let lastWinnerInfo = null; // {seg, totalPts, winnerId}
 
+// Wheel lock — disallow edits while spinning, voting, or a winner is pending
+function wheelLocked() {
+    return !!isSpinning || !!showVoting || !!lastWinnerInfo;
+}
+function applyWheelLock() {
+    const locked = wheelLocked();
+    document.querySelector('.left-column')?.classList.toggle('wheel-locked', locked);
+    document.querySelectorAll('.title-input').forEach(el => el.readOnly = locked);
+    document.querySelectorAll('.title-points').forEach(el => el.disabled = locked);
+    document.querySelectorAll('.point-step-btn').forEach(el => el.disabled = locked);
+    document.querySelectorAll('.title-del-btn').forEach(el => el.disabled = locked);
+    document.querySelectorAll('.add-title-btn').forEach(el => el.disabled = locked);
+}
+
 // Admin refs
 const adminBtn = document.getElementById('adminBtn');
 const adminModal = document.getElementById('adminModal');
@@ -558,6 +572,7 @@ function renderParticipantList() {
 }
 
 function openParticipantsModal() {
+    if (wheelLocked()) return;
     renderParticipantList();
     participantsModal.classList.remove('hidden');
 }
@@ -639,6 +654,7 @@ function renderWatchers() {
         delBtn.textContent = '✕';
         delBtn.title = 'Remove from session';
         delBtn.addEventListener('click', async () => {
+            if (wheelLocked()) return;
             activeIds.delete(w.id);
             await saveSettings({ active_ids: [...activeIds] });
             computeSegments();
@@ -783,6 +799,7 @@ function renderWatchers() {
         addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
         addTitleBtn.textContent = '➕ Add movie';
         addTitleBtn.addEventListener('click', () => {
+            if (wheelLocked()) return;
             const newTitle = { id: null, name: '', points: 1 };
             w.titles.push(newTitle);
             const row = createTitleRow(w, newTitle, w.titles.length - 1);
@@ -798,6 +815,7 @@ function renderWatchers() {
     }
 
     updateWheelInfo();
+    applyWheelLock();
 }
 
 function createTitleRow(watcher, title, index) {
@@ -831,6 +849,7 @@ function createTitleRow(watcher, title, index) {
     let saveQueued = false;
     let saveNeedsRefresh = false;
     async function save() {
+        if (wheelLocked()) return;
         if (savePending) {
             saveQueued = true;
             return;
@@ -923,6 +942,7 @@ function createTitleRow(watcher, title, index) {
     });
 
     minusBtn.addEventListener('click', () => {
+        if (wheelLocked()) return;
         let val = parseFloat(pointsInput.value);
         if (!Number.isFinite(val)) val = 1;
         val = Math.round((val - 1) * 100) / 100;
@@ -945,6 +965,7 @@ function createTitleRow(watcher, title, index) {
     });
 
     plusBtn.addEventListener('click', () => {
+        if (wheelLocked()) return;
         let val = parseFloat(pointsInput.value);
         if (!Number.isFinite(val)) val = 0;
         val = Math.round((val + 1) * 100) / 100;
@@ -964,6 +985,7 @@ function createTitleRow(watcher, title, index) {
     delBtn.className = 'title-del-btn';
     delBtn.textContent = '✕';
     delBtn.addEventListener('click', async () => {
+        if (wheelLocked()) return;
         if (typeof title.id === 'number') await deleteTitle(title.id);
         watcher.titles = watcher.titles.filter(t => t !== title);
         computeSegments();
@@ -1201,6 +1223,7 @@ function spinWheel() {
 
     stopIdleSpin();
     isSpinning = true;
+    applyWheelLock();
     if (shuffleBtn) shuffleBtn.classList.add('hidden');
     lastTickSegment = -1;
     playSpinMusic();
@@ -1264,6 +1287,7 @@ function onSpinComplete() {
         // Store for Accept/Re-roll
         lastWinnerInfo = { seg, totalPts };
         isSpinning = false;
+        applyWheelLock();
 
         // Show Accept Results button, enable re-spin via center circle
         spinBtn.classList.remove('faded');
@@ -1291,6 +1315,7 @@ async function acceptResults() {
     // Lock spinning immediately — before any async work
     showVoting = true;
     isSpinning = true;
+    applyWheelLock();
     spinBtn.classList.add('faded');
     spinBtn.disabled = true;
 
@@ -2443,6 +2468,7 @@ function renderAdminWatchers() {
         delBtn.textContent = '✕';
         delBtn.title = 'Delete watcher';
         delBtn.addEventListener('click', async () => {
+            if (wheelLocked()) return;
             if (!confirm(`Delete "${w.name}" and all their titles?`)) return;
             await deleteWatcher(w.id);
             await fetchData();
@@ -2473,6 +2499,7 @@ adminModal.addEventListener('click', (e) => {
 });
 
 adminAddBtn.addEventListener('click', async () => {
+    if (wheelLocked()) return;
     const name = adminNewName.value.trim();
     if (!name) { alert('Enter a watcher name'); return; }
     try {
@@ -2616,6 +2643,7 @@ socket.on('spin_completed', (data) => {
     const startTime = performance.now();
     const startRotation = wheelRotation;
     isSpinning = true;
+    applyWheelLock();
     document.querySelectorAll('.watcher-del-btn').forEach(b => b.classList.add('hidden'));
 
     function animate(now) {
@@ -2640,6 +2668,7 @@ socket.on('spin_completed', (data) => {
                 fireConfetti();
             }
             isSpinning = false;
+            applyWheelLock();
         }
     }
     animFrameId = requestAnimationFrame(animate);

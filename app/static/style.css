@@ -298,6 +298,15 @@ body {
     margin-left: 25px;
 }
 
+.left-column.wheel-locked .title-input,
+.left-column.wheel-locked .title-points,
+.left-column.wheel-locked .point-step-btn,
+.left-column.wheel-locked .title-del-btn,
+.left-column.wheel-locked .add-title-btn {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .wheel-panel {
     text-align: center;
     display: flex;
