@@ -328,6 +328,7 @@ body.auth-locked .main-layout .point-step-btn,
 body.auth-locked .main-layout .title-del-btn,
 body.auth-locked .main-layout .add-title-btn,
 body.auth-locked .main-layout .watcher-del-btn,
+body.auth-locked .status-toggle-btn,
 body.auth-locked label[for="centerImageInput"] {
     opacity: 0.4;
     pointer-events: none;

@@ -2013,6 +2013,7 @@ function renderWinnersList() {
         statusBtn.className = 'status-toggle-btn';
         statusBtn.textContent = w.status === 'disabled' ? 'Disabled' : 'Active';
         statusBtn.addEventListener('click', async () => {
+            if (!isAuthenticated()) return;
             const next = w.status === 'disabled' ? 'active' : 'disabled';
             try {
                 await fetch(`/api/winners/${w.id}/status`, {
