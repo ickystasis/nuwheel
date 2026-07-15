@@ -63,12 +63,20 @@ async function showRecentPopup(watcherId, anchorBtn) {
                 clearTimeout(popupBlurTimer);
                 popupBlurTimer = null;
             }
+            // Blur the active input so the socket handler doesn't skip re-render
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
+            }
             hideRecentPopupEl();
-            await fetch('/api/titles', {
+            const res = await fetch('/api/titles', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ watcher_id: watcherId, name: movie.name, points: movie.points }),
             });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showError(err.error || 'Failed to add movie');
+            }
         });
         recentPopupEl.appendChild(item);
     });
