@@ -322,12 +322,32 @@ def update_watcher_color(watcher_id):
 
 # ── Titles ──
 
+@bp.route('/watchers/<int:watcher_id>/recent-movies', methods=['GET'])
+def recent_movies(watcher_id):
+    """Return up to 10 distinct movie names (with last-used points) that this watcher has previously spun.
+
+    Based on winner history so it survives across sessions and browsers.
+    """
+    db = get_db(current_app)
+    watcher = db.execute('SELECT name FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
+    if not watcher:
+        return jsonify({'error': 'Watcher not found'}), 404
+
+    rows = db.execute(
+        'SELECT title_name, weight FROM winners '
+        'WHERE watcher_name = ? '
+        'GROUP BY title_name ORDER BY MAX(won_at) DESC LIMIT 10',
+        (watcher['name'],)
+    ).fetchall()
+    return jsonify([{'name': r['title_name'], 'points': r['weight']} for r in rows])
+
+
 @bp.route('/titles', methods=['POST'])
 def add_title():
     """Add a title to a watcher (max 3 per watcher).
 
-    If the watcher has archived titles, the most recently archived one
-    is restored instead of creating a new title.
+    When called without a name, restores the most recently archived title
+    for the watcher if one exists.
     """
     data = request.get_json(silent=True)
     if not data:
@@ -339,26 +359,28 @@ def add_title():
 
     db = get_db(current_app)
 
-    # Check for archived titles to restore first
-    archived = db.execute(
-        'SELECT id, name, points FROM titles WHERE watcher_id = ? AND archived = 1 ORDER BY id DESC LIMIT 1',
-        (watcher_id,)
-    ).fetchone()
-
-    if archived:
-        db.execute('UPDATE titles SET archived = 0, created_at = datetime(\'now\') WHERE id = ?',
-                   (archived['id'],))
-        reshuffle_title_order(db)
-        db.commit()
-        socketio.emit('data_changed', {})
-        row = db.execute('SELECT id, watcher_id, name, points FROM titles WHERE id = ?',
-                         (archived['id'],)).fetchone()
-        return jsonify(dict(row)), 201
-
-    # No archived title — create a new one
     name = data.get('name', '').strip()
+
+    # Only auto-restore archived when no name was provided
     if not name:
+        archived = db.execute(
+            'SELECT id, name, points FROM titles WHERE watcher_id = ? AND archived = 1 ORDER BY id DESC LIMIT 1',
+            (watcher_id,)
+        ).fetchone()
+
+        if archived:
+            db.execute('UPDATE titles SET archived = 0, created_at = datetime(\'now\') WHERE id = ?',
+                       (archived['id'],))
+            reshuffle_title_order(db)
+            db.commit()
+            socketio.emit('data_changed', {})
+            row = db.execute('SELECT id, watcher_id, name, points FROM titles WHERE id = ?',
+                             (archived['id'],)).fetchone()
+            return jsonify(dict(row)), 201
+
         return jsonify({'error': 'Title name is required'}), 400
+
+    # A name was provided — create new title (don't auto-restore)
     if len(name) > 200:
         return jsonify({'error': 'Title too long (max 200 chars)'}), 400
 

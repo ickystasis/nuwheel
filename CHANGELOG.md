@@ -50,10 +50,12 @@
 - Fixed internal nginx listening on port 443 instead of 9642 (mismatch with docker-compose port mapping)
 - Fixed temporal-dead-zone crash (`votesData` read before its `let` declaration)
 
-### Movie Archive
-- Deleting a movie now archives it server-side instead of permanent deletion
-- Clicking "Add movie" restores the most recently archived movie (name + points) for that watcher
-- Archived movies survive page refreshes and work across browsers — no cookies needed
+### Movie Archive & Recent Movies Popup
+- Deleting a movie now archives it server-side instead of permanent deletion (can be restored later)
+- Clicking "Add movie" shows a popup of the last 10 movies that watcher has previously spun (from winner history)
+- Clicking a movie in the popup creates a new title row pre-filled with that name and points
+- Popup closes when clicking outside or when typing in any title input
+- Archived movies and recent-movies list work across browsers — no cookies needed
 - Fixed duplicate `let` declarations for `votesData` and `spinMovies` in same scope
 - Fixed case mismatch between imported vote keys (lowercase) and stored `watcher_name` (original casing)
 - Fixed Docker build not picking up file changes on Windows (use `--build` flag)

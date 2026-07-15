@@ -674,6 +674,42 @@ body {
     transform: translateY(-1px);
 }
 
+/* Recent movies popup */
+.recent-movies-popup {
+    background: #1e1e36;
+    border: 1px solid #3a3a5a;
+    border-radius: 10px;
+    padding: 0.4rem 0;
+    margin-top: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 100;
+}
+
+.recent-movie-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.85rem;
+}
+
+.recent-movie-item:hover {
+    background: rgba(78, 205, 196, 0.12);
+}
+
+.recent-movie-name {
+    color: #e0e0e0;
+    font-weight: 600;
+}
+
+.recent-movie-pts {
+    color: #ffd93d;
+    font-weight: 700;
+    margin-left: 0.75rem;
+}
+
 .balance-box {
     margin-top: 0.6rem;
     padding: 0.7rem 0.8rem;

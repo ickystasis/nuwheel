@@ -7,6 +7,14 @@ let allWatchers = [];    // [{id, name, points, titles}]
 let activeIds = new Set(); // set of watcher IDs currently participating
 let segments = [];
 let isSpinning = false;
+let activeRecentPopup = null;
+
+function closeRecentMoviesPopup() {
+    if (activeRecentPopup) {
+        activeRecentPopup.remove();
+        activeRecentPopup = null;
+    }
+}
 let wheelRotation = 0;
 let animFrameId = null;
 let idleAnimFrameId = null;
@@ -711,29 +719,72 @@ function renderWatchers() {
         const addTitleBtn = document.createElement('button');
         addTitleBtn.className = 'btn btn-small btn-add add-title-btn';
         addTitleBtn.textContent = '➕ Add movie';
-        addTitleBtn.addEventListener('click', async () => {
-            const res = await fetch('/api/titles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ watcher_id: watcher.id, name: '', points: 1 }),
-            });
-            if (res.ok) {
-                const restored = await res.json();
-                w.titles.push(restored);
-                titlesContainer.appendChild(createTitleRow(w, restored, w.titles.length - 1));
-            } else {
-                const err = await res.json().catch(() => ({}));
-                // Title name is required means no archived title to restore
-                if (res.status === 400 && err.error === 'Title name is required') {
-                    const newTitle = { id: null, name: '', points: 1 };
-                    w.titles.push(newTitle);
-                    titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
-                } else {
-                    showError(err.error || 'Failed to add movie');
-                    return;
-                }
-            }
+        addTitleBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeRecentMoviesPopup();
             updateWheelInfo();
+
+            // Fetch recent movies from winner history for this watcher
+            let recent = [];
+            try {
+                const res = await fetch(`/api/watchers/${watcher.id}/recent-movies`);
+                if (res.ok) recent = await res.json();
+            } catch (_) {}
+
+            if (recent.length === 0) {
+                const newTitle = { id: null, name: '', points: 1 };
+                w.titles.push(newTitle);
+                titlesContainer.appendChild(createTitleRow(w, newTitle, w.titles.length - 1));
+                updateWheelInfo();
+                return;
+            }
+
+            // Build and show the popup
+            const popup = document.createElement('div');
+            popup.className = 'recent-movies-popup';
+            recent.forEach(movie => {
+                const item = document.createElement('div');
+                item.className = 'recent-movie-item';
+                item.innerHTML = `<span class="recent-movie-name">${escHtml(movie.name)}</span> <span class="recent-movie-pts">${movie.points}p</span>`;
+                item.addEventListener('click', async () => {
+                    closeRecentMoviesPopup();
+                    const res = await fetch('/api/titles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ watcher_id: watcher.id, name: movie.name, points: movie.points }),
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        showError(err.error || 'Failed to add movie');
+                        return;
+                    }
+                    const created = await res.json();
+                    w.titles.push(created);
+                    titlesContainer.appendChild(createTitleRow(w, created, w.titles.length - 1));
+                    updateWheelInfo();
+                });
+                popup.appendChild(item);
+            });
+            addTitleBtn.parentNode.insertBefore(popup, addTitleBtn.nextSibling);
+            activeRecentPopup = popup;
+
+            // Close on click outside
+            const outsideHandler = (ev) => {
+                if (activeRecentPopup && !activeRecentPopup.contains(ev.target) && ev.target !== addTitleBtn) {
+                    closeRecentMoviesPopup();
+                    document.removeEventListener('click', outsideHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', outsideHandler), 0);
+
+            // Close when user starts typing in any title input
+            const typeHandler = () => {
+                if (activeRecentPopup) {
+                    closeRecentMoviesPopup();
+                    document.removeEventListener('input', typeHandler, true);
+                }
+            };
+            document.addEventListener('input', typeHandler, true);
         });
 
         card.appendChild(titlesContainer);
