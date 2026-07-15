@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [1.8.0] - 2026-07-14
 
 ### Password Protection
 - Lock/Unlock button replaces exposed admin button — settings, wheel spin, edits, and votes require password re-entry on each page load
