@@ -1,4 +1,4 @@
-# Wheel of Doom(b) 🎡
+# nuwheel 🎡
 
 A chaotic multiplayer movie-picking game where watchers add titles to a spinning wheel, allocate point budgets, spin to pick a winner, then vote to pass or punish. Points swing back and forth through a debt matrix — repeat punishes rack up escalating debts.
 
