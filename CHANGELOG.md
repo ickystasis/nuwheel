@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.8.3] - 2026-07-17
+
+### Fixed
+- Pass verdict no longer clears debts the winner owes to others (`pass_movie()` in `routes.py`). Debts owed **TO** the winner are already cleared by `process_win()` before the verdict; the pass endpoint was incorrectly also clearing debts the winner **owes** to others (e.g. Anthony owing 2 to G. Matt), returning those points when it should not have
+
+## [1.8.2] - 2026-07-15
+
+### Removed
+- Import History button and all related code (CSV import modal, API endpoint, backend logic) — was hardcoded for personal use, data already imported
+
+### Fixed
+- Winner weight in the Previous Winners panel now preserves decimal values — changed `int()` to `float()` in the save_winner route and updated DB schema from `INTEGER` to `REAL` for weight/total_weight columns
+
+### Moved
+- Change Center Image button removed from toolbar and relocated to the Admin Panel (🔧 Setup) — file input accessible only after authentication
+
+### UI
+- Toolbar buttons reordered: left side = 🏆 Past Winners, 📊 Stats; right side = 👤 Select Victims, 🔧 Admin, 🔒 Login/Logout
+- Select Victims button now hidden when page is locked (requires authentication), matching Admin button behavior
+- Minimum font size for wheel segment text on small tiles increased from 12px to 14px
+
+### Infrastructure
+- Database backup script (`backup.sh`) — copies `wheel.db` to `/data/backups/` daily at noon with 14-day rolling retention
+- Cron daemon (`crond`) started in container to run the backup schedule
+- Dockerfile now uses `CMD ["sh", "/app/run.sh"]` (run.sh includes cron setup)
+
+>>>>>>> 8d7bfb6 (v1.8.3: fix pass verdict clearing debts winner owes to others)
 ## [1.8.1] - 2026-07-15
 
 ### Recent Movies Popup
