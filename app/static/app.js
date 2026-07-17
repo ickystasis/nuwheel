@@ -657,6 +657,7 @@ function refreshWatchersPreservingFocus() {
 function renderWatchers() {
     watchersContainer.innerHTML = '';
     const active = getActiveWatchers();
+    const activeNames = new Set(active.map(a => a.name));
 
     if (active.length === 0) {
         emptyMsg.style.display = 'block';

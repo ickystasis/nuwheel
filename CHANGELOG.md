@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.5] - 2026-07-17
+
+### Fixed
+- `renderWatchers()` crash on page load: `activeNames` was referenced in the points tooltip code but only defined in `renderVerdict()`, causing victim panel and wheel to fail to render
+
 ## [1.8.4] - 2026-07-17
 
 ### Added
