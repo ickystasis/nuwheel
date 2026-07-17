@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.4] - 2026-07-17
+
+### Added
+- Version endpoint `GET /api/version` and build number displayed in the Admin Panel footer — makes it easy to tell which build is running
+- `VERSION` constant in `app/__init__.py`, served via new route in `routes.py`
+
+### Fixed
+- Point breakdown tooltips on the victim panel now only show debts involving current (active) participants. If a watcher isn't on the wheel, their debts are filtered out of the tooltip
+- `run.sh` and `backup.sh` converted to LF line endings for Alpine Linux compatibility — Docker container was crash-looping on CRLF scripts
+
 ## [1.8.3] - 2026-07-17
 
 ### Fixed
