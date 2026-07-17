@@ -328,8 +328,7 @@ body.auth-locked .main-layout .point-step-btn,
 body.auth-locked .main-layout .title-del-btn,
 body.auth-locked .main-layout .add-title-btn,
 body.auth-locked .main-layout .watcher-del-btn,
-body.auth-locked .status-toggle-btn,
-body.auth-locked label[for="centerImageInput"] {
+body.auth-locked .status-toggle-btn {
     opacity: 0.4;
     pointer-events: none;
 }
@@ -1159,8 +1158,6 @@ body.auth-locked .cell-editable {
 #debtMatrixBtn.btn-icon:hover { background: rgba(167, 139, 250, 0.25); }
 #adminBtn.btn-icon { background: rgba(255, 107, 107, 0.15); border-color: rgba(255, 107, 107, 0.3); }
 #adminBtn.btn-icon:hover { background: rgba(255, 107, 107, 0.25); }
-label.btn-icon[for="centerImageInput"] { background: rgba(255, 107, 187, 0.15); border-color: rgba(255, 107, 187, 0.3); }
-label.btn-icon[for="centerImageInput"]:hover { background: rgba(255, 107, 187, 0.25); }
 
 
 .modal-content {

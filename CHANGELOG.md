@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.5] - 2026-07-17
+
+### Fixed
+- `renderWatchers()` crash on page load: `activeNames` was referenced in the points tooltip code but only defined in `renderVerdict()`, causing victim panel and wheel to fail to render
+
 ## [1.8.4] - 2026-07-17
 
 ### Added
@@ -36,7 +41,6 @@
 - Cron daemon (`crond`) started in container to run the backup schedule
 - Dockerfile now uses `CMD ["sh", "/app/run.sh"]` (run.sh includes cron setup)
 
->>>>>>> 8d7bfb6 (v1.8.3: fix pass verdict clearing debts winner owes to others)
 ## [1.8.1] - 2026-07-15
 
 ### Recent Movies Popup

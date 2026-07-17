@@ -288,12 +288,6 @@ const retroVoteModal = document.getElementById('retroVoteModal');
 const retroVoteCloseBtn = document.getElementById('retroVoteCloseBtn');
 const retroVoteBody = document.getElementById('retroVoteBody');
 const retroVoteRecordBtn = document.getElementById('retroVoteRecordBtn');
-const importWinnersModal = document.getElementById('importWinnersModal');
-const importWinnersCloseBtn = document.getElementById('importWinnersCloseBtn');
-const importWinnersBtn = document.getElementById('importWinnersBtn');
-const importWinnersText = document.getElementById('importWinnersText');
-const importWinnersSubmitBtn = document.getElementById('importWinnersSubmitBtn');
-const importStatus = document.getElementById('importStatus');
 let retroVoteWinnerId = null; // winner id being retro-voted
 let retroVoteProposerName = null; // proposer for retro-vote tiebreaker
 let retroVotes = {}; // {watcherName: 'pass'|'punish'}
@@ -338,6 +332,7 @@ function applyAuthLock() {
     const authed = isAuthenticated();
     document.body.classList.toggle('auth-locked', !authed);
     document.getElementById('adminBtn')?.classList.toggle('hidden', !authed);
+    document.getElementById('addWatcherBtn')?.classList.toggle('hidden', !authed);
     const lockBtn = document.getElementById('lockBtn');
     if (lockBtn) {
         lockBtn.textContent = authed ? '🔓' : '🔒';
@@ -662,6 +657,7 @@ function refreshWatchersPreservingFocus() {
 function renderWatchers() {
     watchersContainer.innerHTML = '';
     const active = getActiveWatchers();
+    const activeNames = new Set(active.map(a => a.name));
 
     if (active.length === 0) {
         emptyMsg.style.display = 'block';
@@ -1134,7 +1130,7 @@ function drawWheel(rotation) {
 
         let fontSize = Math.floor(wheelSize * 0.049 * arcProportion);
         let lines = wrapText(fontSize);
-        while (fontSize > 12 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > Math.min(maxTextWidth, angularSpace)))) {
+        while (fontSize > 14 && (lines.length > 2 || lines.some(l => ctx.measureText(l).width > Math.min(maxTextWidth, angularSpace)))) {
             fontSize -= 4;
             lines = wrapText(fontSize);
         }
@@ -2424,7 +2420,7 @@ async function recordRetroVote() {
 }
 
 // Image upload for center button (persisted server-side)
-document.getElementById('centerImageInput').addEventListener('change', (e) => {
+document.getElementById('adminCenterImageInput')?.addEventListener('change', (e) => {
     if (!isAuthenticated()) return;
     const file = e.target.files[0];
     if (!file) return;
@@ -2641,15 +2637,6 @@ debtMatrixModal.addEventListener('click', (e) => {
     if (e.target === debtMatrixModal) closeDebtMatrix();
 });
 
-importWinnersBtn.addEventListener('click', () => {
-    importWinnersText.value = '';
-    importWinnersText.disabled = false;
-    importStatus.style.display = 'none';
-    importStatus.textContent = '';
-    importWinnersModal.classList.remove('hidden');
-    setTimeout(() => importWinnersText.focus(), 200);
-});
-
 // Winners filter dropdowns
 document.getElementById('filterJudgement')?.addEventListener('change', renderWinnersList);
 document.getElementById('filterWeight')?.addEventListener('change', renderWinnersList);
@@ -2665,52 +2652,6 @@ document.getElementById('filterResetBtn')?.addEventListener('click', () => {
     if (pEl) pEl.value = 'all';
     if (sEl) sEl.value = '';
     renderWinnersList();
-});
-
-importWinnersCloseBtn.addEventListener('click', () => importWinnersModal.classList.add('hidden'));
-importWinnersModal.addEventListener('click', (e) => {
-    if (e.target === importWinnersModal) importWinnersModal.classList.add('hidden');
-});
-
-importWinnersSubmitBtn.addEventListener('click', async () => {
-    const csvText = importWinnersText.value.trim();
-    if (!csvText) return;
-    importWinnersSubmitBtn.disabled = true;
-    importWinnersSubmitBtn.textContent = 'Importing...';
-    importStatus.style.display = 'none';
-    try {
-        const res = await fetch('/api/winners/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ csv: csvText }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Import failed');
-        let msg = `✅ Imported ${data.succeeded} winner${data.succeeded !== 1 ? 's' : ''}`;
-        if (data.errors && data.errors.length > 0) {
-            msg += `\n\n⚠️ ${data.errors.length} row${data.errors.length !== 1 ? 's' : ''} skipped:\n`;
-            for (const err of data.errors) {
-                msg += `\nRow ${err.row} "${err.title}": ${err.errors.join('; ')}`;
-            }
-        }
-        importStatus.textContent = msg;
-        importStatus.style.display = 'block';
-        if (!data.errors || data.errors.length === 0) {
-            setTimeout(() => {
-                importWinnersModal.classList.add('hidden');
-            }, 1500);
-        }
-    } catch (e) {
-        importStatus.textContent = '❌ Import failed: ' + e.message;
-        importStatus.style.display = 'block';
-        importWinnersSubmitBtn.disabled = false;
-        importWinnersSubmitBtn.textContent = 'Import CSV';
-        importWinnersText.focus();
-        return;
-    }
-    importWinnersSubmitBtn.disabled = false;
-    importWinnersSubmitBtn.textContent = 'Import CSV';
-    importWinnersText.focus();
 });
 
 // ============================================================

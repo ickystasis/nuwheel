@@ -1,5 +1,3 @@
-import csv
-import io
 import json
 import os
 import random
@@ -546,8 +544,8 @@ def save_winner():
         return jsonify({'error': 'title_name and watcher_name are required'}), 400
 
     try:
-        weight = int(data.get('weight', 0))
-        total_weight = int(data.get('total_weight', 0))
+        weight = float(data.get('weight', 0))
+        total_weight = float(data.get('total_weight', 0))
     except (TypeError, ValueError):
         return jsonify({'error': 'weight and total_weight must be numbers'}), 400
 
@@ -638,101 +636,6 @@ def set_winner_status(winner_id):
     db.commit()
     socketio.emit('winners_changed', {})
     return jsonify({'ok': True, 'status': status, 'winner_id': winner_id})
-
-
-@bp.route('/winners/import', methods=['POST'])
-def import_winners():
-    """Import legacy winner history from CSV data."""
-    data = request.get_json(silent=True) or {}
-    payload = data.get('csv', '')
-    if not payload:
-        return jsonify({'error': 'csv payload is required'}), 400
-
-    # Split into non-blank lines, skip blanks
-    all_lines = [l for l in payload.split('\n') if l.strip()]
-    if len(all_lines) < 2:
-        return jsonify({'error': 'Need at least a header row and one data row'}), 400
-
-    header_line = all_lines[0].strip()
-    norm_headers = [h.strip().lower() for h in next(csv.reader([header_line]))]
-
-    data_payload = '\n'.join(all_lines[1:])
-    reader = csv.DictReader(io.StringIO(data_payload), fieldnames=norm_headers)
-
-    known_cols = {'date', 'title_name', 'movie', 'name', 'watcher_name', 'proposer', 'winner',
-                  'weight', 'points', 'total_weight', 'total_points', 'punish', 'status',
-                  'participants', 'victims', 'max_weight', 'max', 'streak'}
-    voter_cols = [c for c in norm_headers if c not in known_cols and c != '']
-
-    inserted = []
-    errors = []
-    import json
-    db = get_db(current_app)
-    for i, row in enumerate(reader, start=2):
-        row_errors = []
-
-        title_name = (row.get('title_name') or row.get('movie') or row.get('name') or '').strip()
-        watcher_name = (row.get('watcher_name') or row.get('proposer') or row.get('winner') or '').strip()
-
-        if not title_name:
-            row_errors.append('title_name (or movie/name) is required')
-        if not watcher_name:
-            row_errors.append('watcher_name (or proposer/winner) is required')
-        if row_errors:
-            errors.append({'row': i, 'title': title_name or '(empty)', 'errors': row_errors})
-            continue
-
-        try:
-            weight = int(row.get('weight') or row.get('points') or 0) or 0
-        except (ValueError, TypeError):
-            weight = 0
-
-        try:
-            total_weight = int(row.get('total_weight') or row.get('total_points') or row.get('max_weight') or row.get('max') or 0) or 0
-        except (ValueError, TypeError):
-            total_weight = 0
-
-        punish_raw = str(row.get('punish') or '').strip().lower()
-        judgement = 'punish' if punish_raw in ('y', 'yes', 'true', '1') else ('pass' if punish_raw in ('n', 'no', 'false', '0') else '')
-
-        won_at = (row.get('date') or '').strip()
-
-        votes = {}
-        for voter in voter_cols:
-            val = str(row.get(voter) or '').strip().lower()
-            is_proposer = (voter.lower() == watcher_name.lower())
-            if is_proposer:
-                # Proposer can only vote Punish or NA per Charter
-                if val in ('na', 'n', 'no', 'pass', '0'):
-                    votes[voter] = 'na'
-                elif val in ('y', 'yes', 'punish', '1'):
-                    votes[voter] = 'punish'
-            else:
-                if val in ('y', 'yes', 'punish', '1'):
-                    votes[voter] = 'punish'
-                elif val in ('n', 'no', 'pass', '0'):
-                    votes[voter] = 'pass'
-
-        votes_json = json.dumps(votes) if votes else '{}'
-        # Build participants string from voter names for attendance tracking
-        participants = ', '.join(voter_cols)
-        db.execute(
-            'INSERT INTO winners (title_name, watcher_name, weight, total_weight, participants, status, judgement, votes, won_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            (title_name, watcher_name, weight, total_weight, participants, 'active', judgement, votes_json, won_at if won_at else None)
-        )
-        inserted.append({'title_name': title_name, 'watcher_name': watcher_name})
-
-    if inserted:
-        db.commit()
-        socketio.emit('winners_changed', {})
-
-    return jsonify({
-        'ok': True,
-        'inserted': inserted,
-        'errors': errors,
-        'total': len(inserted) + len(errors),
-        'succeeded': len(inserted),
-    })
 
 
 @bp.route('/stats', methods=['GET'])

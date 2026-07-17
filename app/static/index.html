@@ -13,13 +13,12 @@
             <!-- Left Column -->
             <div class="left-column">
                 <div class="add-section">
-                    <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
                     <button id="winnersBtn" class="btn btn-icon" title="Previous Winners">🏆</button>
                     <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
+                    <span style="flex:1"></span>
+                    <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
                     <button id="adminBtn" class="btn btn-icon hidden" title="Admin">🔧</button>
-                    <label for="centerImageInput" class="btn btn-icon" title="Center Image" style="cursor:pointer">🖼️</label>
-                    <input type="file" id="centerImageInput" accept="image/*" style="display:none" />
-                    <button id="lockBtn" class="btn btn-icon" title="Unlock settings" style="margin-left:auto">🔒</button>
+                    <button id="lockBtn" class="btn btn-icon" title="Unlock settings">🔒</button>
                 </div>
                 <div class="list-panel" id="watchersPanel">
                     <div class="watcher-panel-header">
@@ -110,7 +109,6 @@
             </div>
             <div id="winnersTooltip" class="pts-tooltip hidden"></div>
             <div class="modal-footer" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
-                <button id="importWinnersBtn" class="btn btn-clear-winners">📥 Import History</button>
             </div>
         </div>
     </div>
@@ -162,10 +160,13 @@
                     </div>
                 <div id="adminWatchersList"></div>
                 <hr style="border-color:#2a2a3e;margin:1rem 0">
+                <div class="new-watcher-row">
+                    <span style="color:#e0e0e0;font-size:0.9rem;flex:1">Wheel Center Image</span>
+                    <label for="adminCenterImageInput" class="btn btn-small btn-add" style="cursor:pointer">🖼️ Change</label>
+                    <input type="file" id="adminCenterImageInput" accept="image/*" style="display:none" />
+                </div>
+                <hr style="border-color:#2a2a3e;margin:1rem 0">
                 <div style="color:#6a6a7e;font-size:0.8rem;text-align:center" id="adminVersionDisplay"></div>
-            </div>
-        </div>
-    </div>
             </div>
         </div>
     </div>
