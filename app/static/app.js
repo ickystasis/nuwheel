@@ -707,8 +707,11 @@ function renderWatchers() {
         const displayPoints = w.points <= 0 ? 1 : w.points;
         const ptsTooltipHtml = (() => {
             const lines = [];
-            if (w.owed_to && w.owed_to.length > 0) {
-                for (const d of w.owed_to) {
+            const filterActive = arr => (arr || []).filter(d => activeNames.has(d.name));
+            const owedTo = filterActive(w.owed_to);
+            const owedBy = filterActive(w.owed_by);
+            if (owedTo.length > 0) {
+                for (const d of owedTo) {
                     lines.push(`<span class="pos">+${d.amount}</span> from ${escHtml(d.name)}`);
                     if (d.entries && d.entries.length > 0) {
                         for (const e of d.entries) {
@@ -718,8 +721,8 @@ function renderWatchers() {
                     }
                 }
             }
-            if (w.owed_by && w.owed_by.length > 0) {
-                for (const d of w.owed_by) {
+            if (owedBy.length > 0) {
+                for (const d of owedBy) {
                     lines.push(`<span class="neg">-${d.amount}</span> to ${escHtml(d.name)}`);
                     if (d.entries && d.entries.length > 0) {
                         for (const e of d.entries) {
@@ -729,8 +732,8 @@ function renderWatchers() {
                     }
                 }
             }
-            const owedToSum = (w.owed_to || []).reduce((s, d) => s + d.amount, 0);
-            const owedBySum = (w.owed_by || []).reduce((s, d) => s + d.amount, 0);
+            const owedToSum = owedTo.reduce((s, d) => s + d.amount, 0);
+            const owedBySum = owedBy.reduce((s, d) => s + d.amount, 0);
             lines.push(`<span class="summary">6 + ${owedToSum} - ${owedBySum} = ${w.points}</span>`);
             return lines.join('<br>');
         })();
@@ -1510,7 +1513,9 @@ async function renderVerdict() {
         // Record per-watcher votes + judgement in the winner entry
         if (lastWinnerInfo.winnerId) {
             const votesObj = {};
-            for (const w of active) {
+    const activeNames = new Set(active.map(a => a.name));
+
+    for (const w of active) {
                 votesObj[String(w.id)] = watcherVotes[w.id];
             }
             await fetch(`/api/winners/${lastWinnerInfo.winnerId}/verdict`, {
