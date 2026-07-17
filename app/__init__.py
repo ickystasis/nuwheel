@@ -2,7 +2,7 @@ import os
 from flask import Flask
 from .socketio_ext import socketio
 
-VERSION = '1.8.5'
+VERSION = '1.8.6'
 
 
 def create_app():

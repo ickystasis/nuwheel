@@ -691,6 +691,7 @@ function renderWatchers() {
             if (wheelLocked()) return;
             activeIds.delete(w.id);
             await saveSettings({ active_ids: [...activeIds] });
+            await fetchData();
             computeSegments();
             renderAll();
         });
@@ -2451,6 +2452,7 @@ startMovieNightBtn.addEventListener('click', async () => {
     if (!isAuthenticated()) return;
     await saveSettings({ active_ids: [...activeIds] });
     closeParticipantsModal();
+    await fetchData();
     renderAll();
 });
 shuffleBtn.addEventListener('click', shuffleWheel);
@@ -2614,6 +2616,7 @@ adminAddBtn.addEventListener('click', async () => {
         adminNewName.value = '';
         adminColorInput.value = '#4ECDC4';
         renderAdminWatchers();
+        await fetchData();
         renderAll();
     } catch (e) { alert(e.message); }
 });
