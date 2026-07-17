@@ -7,6 +7,7 @@ import re
 from flask import Blueprint, request, jsonify, current_app
 from .models import get_db
 from .socketio_ext import socketio
+from . import VERSION
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 BASE_POINTS = 6
@@ -189,6 +190,13 @@ def get_data():
             'owed_by': [{'name': name_map[r['creditor_id']], 'amount': r['amount'], 'entries': _get_entries(w['id'], r['creditor_id'])} for r in owed_by_rows],
         })
     return jsonify(result)
+
+
+# ── Version ──
+
+@bp.route('/version', methods=['GET'])
+def get_version():
+    return jsonify({'version': VERSION})
 
 
 # ── Settings ──

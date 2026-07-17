@@ -2,6 +2,8 @@ import os
 from flask import Flask
 from .socketio_ext import socketio
 
+VERSION = '1.8.3'
+
 
 def create_app():
     """Create and configure the Flask application."""

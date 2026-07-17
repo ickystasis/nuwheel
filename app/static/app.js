@@ -2577,6 +2577,11 @@ async function openAdminModal() {
     const ok = await verifyAdminPassword();
     if (!ok) return;
     renderAdminWatchers();
+    try {
+        const res = await fetch('/api/version');
+        const data = await res.json();
+        document.getElementById('adminVersionDisplay').textContent = `v${data.version}`;
+    } catch { /* ignore */ }
     adminModal.classList.remove('hidden');
 }
 
