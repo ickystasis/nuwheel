@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.3] - 2026-07-17
+
+### Fixed
+- Pass verdict no longer clears debts the winner owes to others (`pass_movie()` in `routes.py`). Debts owed **TO** the winner are already cleared by `process_win()` before the verdict; the pass endpoint was incorrectly also clearing debts the winner **owes** to others (e.g. Anthony owing 2 to G. Matt), returning those points when it should not have
+
 ## [1.8.2] - 2026-07-15
 
 ### Removed

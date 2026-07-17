@@ -898,7 +898,7 @@ def abort_session():
 
 @bp.route('/spin/pass', methods=['POST'])
 def pass_movie():
-    """Reset the watcher's punish streak to 0 and clear all debts the winner owes."""
+    """Reset the watcher's punish streak to 0. Debts owed to the winner were already cleared by process-win."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'Request body required'}), 400
@@ -919,58 +919,9 @@ def pass_movie():
     winner_record_id = data.get('winner_record_id')
     process_win_cleared = data.get('process_win_cleared', [])
 
-    # Clear all debts involving the winner (both directions)
-    returned_to = []
-    points_saved = 0
-    # Include debts already cleared by process-win
-    for item in process_win_cleared:
-        returned_to.append({'name': item.get('debtor_name', '?'), 'amount': item.get('amount', 0), 'total_debt': 0})
-        points_saved += item.get('amount', 0)
-
-    if participant_ids:
-        placeholders = ','.join('?' * len(participant_ids))
-        # Debts the winner owes to others (winner is debtor)
-        debts_owed = db.execute(
-            f'SELECT creditor_id, amount FROM debts WHERE debtor_id = ? AND creditor_id IN ({placeholders}) AND amount != 0',
-            [winner_id] + participant_ids
-        ).fetchall()
-        # Debts others owe to the winner (winner is creditor)
-        debts_owed_to = db.execute(
-            f'SELECT debtor_id, amount FROM debts WHERE creditor_id = ? AND debtor_id IN ({placeholders}) AND amount != 0',
-            [winner_id] + participant_ids
-        ).fetchall()
-        for d in debts_owed:
-            creditor = db.execute('SELECT name FROM watchers WHERE id = ?', (d['creditor_id'],)).fetchone()
-            if creditor:
-                returned_to.append({'name': creditor['name'], 'amount': d['amount'], 'total_debt': 0})
-                points_saved += d['amount']
-            db.execute(
-                'UPDATE debts SET amount = 0 WHERE debtor_id = ? AND creditor_id = ?',
-                (winner_id, d['creditor_id'])
-            )
-            if winner_record_id:
-                db.execute(
-                    'INSERT INTO debt_ledger (debtor_id, creditor_id, delta, remaining, winner_id, event_type) '
-                    'VALUES (?, ?, ?, 0, ?, ?)',
-                    (winner_id, d['creditor_id'], -d['amount'], winner_record_id, 'refund')
-                )
-                _consume_debt_entries(db, winner_id, d['creditor_id'], d['amount'])
-        for d in debts_owed_to:
-            debtor = db.execute('SELECT name FROM watchers WHERE id = ?', (d['debtor_id'],)).fetchone()
-            if debtor:
-                returned_to.append({'name': debtor['name'], 'amount': d['amount'], 'total_debt': 0})
-                points_saved += d['amount']
-            db.execute(
-                'UPDATE debts SET amount = 0 WHERE debtor_id = ? AND creditor_id = ?',
-                (d['debtor_id'], winner_id)
-            )
-            if winner_record_id:
-                db.execute(
-                    'INSERT INTO debt_ledger (debtor_id, creditor_id, delta, remaining, winner_id, event_type) '
-                    'VALUES (?, ?, ?, 0, ?, ?)',
-                    (d['debtor_id'], winner_id, -d['amount'], winner_record_id, 'refund')
-                )
-                _consume_debt_entries(db, d['debtor_id'], winner_id, d['amount'])
+    # Only report debts already cleared by process-win (winner as creditor)
+    returned_to = [{ 'name': item.get('debtor_name', '?'), 'amount': item.get('amount', 0), 'total_debt': 0 } for item in process_win_cleared]
+    points_saved = sum(item.get('amount', 0) for item in process_win_cleared)
 
     db.execute('UPDATE watchers SET punish_streak = 0 WHERE id = ?', (winner_id,))
     db.commit()
