@@ -529,6 +529,25 @@ async function fetchStats() {
     return res.json();
 }
 
+async function saveIncompleteWinner(data) {
+    await fetch('/api/spin/incomplete-winner', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+}
+
+async function fetchIncompleteWinner() {
+    try {
+        const res = await fetch('/api/spin/incomplete-winner');
+        return await res.json();
+    } catch { return null; }
+}
+
+async function clearIncompleteWinner() {
+    await fetch('/api/spin/incomplete-winner', { method: 'DELETE' });
+}
+
 // ============================================================
 //  Active watchers helpers
 // ============================================================
@@ -997,8 +1016,8 @@ function createTitleRow(watcher, title, index) {
     });
 
     pointsInput.addEventListener('input', () => {
-        let val = parseFloat(pointsInput.value) || 1;
-        if (val < 0.1) val = 0.1;
+        let val = parseFloat(pointsInput.value);
+        if (!Number.isFinite(val) || val < 0) val = 0;
         val = Math.round(val * 100) / 100;
         title.points = val;
         clearTimeout(saveTimer);
@@ -1382,8 +1401,8 @@ async function acceptResults() {
     );
     if (saved && saved.id) {
         lastWinnerInfo.winnerId = saved.id;
-        // Store incomplete state in localStorage for recovery
-        localStorage.setItem('incompleteWinner', JSON.stringify({
+        // Store incomplete state on server for recovery across sessions
+        saveIncompleteWinner({
             winnerRecordId: saved.id,
             titleName: seg.name,
             watcherName: seg.watcherName,
@@ -1393,12 +1412,18 @@ async function acceptResults() {
             participantNames: participantNames,
             wheelRotation: wheelRotation,
             segmentOrder: segments.map(s => `${s.name}|${s.watcherName}`),
-        }));
+        });
         fetchWinners();
     }
 
-    await fetchData();
-    renderAll();
+    // Skip fetchData/renderAll — data hasn't changed, and re-fetching may shift
+    // segment order and make the wheel appear to jump. Keep the exact spin state.
+    computeSegments();
+    renderWatchers();
+    drawWheel(wheelRotation);
+    if (shuffleBtn) {
+        shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0 || showVoting);
+    }
 
     // Activate voting mode: show vote toggles + Render Verdict + Abort buttons
     const activeWatchers = getActiveWatchers();
@@ -1406,7 +1431,6 @@ async function acceptResults() {
     for (const w of activeWatchers) {
         watcherVotes[w.id] = w.name === seg.watcherName ? 'na' : 'pass';
     }
-    renderWatchers();
     verdictBtn.classList.remove('faded');
     verdictBtn.disabled = false;
     abortBtn.classList.remove('faded');
@@ -1456,7 +1480,7 @@ async function abortSession() {
         watcherVotes = {};
         isSpinning = false;
         lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
+        clearIncompleteWinner();
         renderAll();
         startIdleSpin();
         verdictBtn.classList.add('faded');
@@ -1593,16 +1617,18 @@ async function renderVerdict() {
         watcherVotes = {};
         isSpinning = false;
         lastWinnerInfo = null;
-        localStorage.removeItem('incompleteWinner');
+        clearIncompleteWinner();
         renderAll();
         startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
         abortBtn.classList.add('faded');
         abortBtn.disabled = true;
-    }, 2500);
+    }, 2000);
 }
 
+// ============================================================
+//  Render Verdict (replaces individual Pass / Punish)
 // ============================================================
 //  Wheel Info
 // ============================================================
@@ -1769,6 +1795,7 @@ function renderWinnersList() {
     const filtered = winners.filter(w => {
         if (jFilter === 'punish' && w.judgement !== 'punish') return false;
         if (jFilter === 'not-punish' && w.judgement === 'punish') return false;
+        if (jFilter === 'aborted' && w.judgement !== 'aborted') return false;
         if (wFilter === '1') {
             const budget = parseInt(w.watcher_budget) || 0;
             const movieCount = parseInt(w.watcher_movie_count) || 0;
@@ -2776,11 +2803,10 @@ canvas.addEventListener('mousemove', (e) => {
     startIdleSpin();
     requestAnimationFrame(() => requestAnimationFrame(resizeWheel));
 
-    // Recover incomplete spin state
+    // Recover incomplete spin state from server (cross-session)
     try {
-        const raw = localStorage.getItem('incompleteWinner');
-        if (raw) {
-            const info = JSON.parse(raw);
+        const info = await fetchIncompleteWinner();
+        if (info) {
             const winnerRecord = winners.find(x => x.id == info.winnerRecordId);
             if (winnerRecord && !winnerRecord.judgement) {
                 stopIdleSpin();

@@ -1,9 +1,19 @@
 # Changelog
 
-## [1.8.6] - 2026-07-17
+## [1.8.7] - 2026-07-20
 
 ### Fixed
-- Points badge and debt tooltip now refresh when participants are added/removed via the ✕ button, Start Movie Night, or Admin panel — `fetchData()` was missing in several paths, leaving stale `owed_to`/`owed_by`/`points` computed against the old participant set
+- Wheel no longer visually jumps when Accept is clicked — `acceptResults()` no longer calls `fetchData()` + `renderAll()`, which could shift segment order and make the wheel appear to rotate
+- `_enforce_title_budget` removed — dead function that was silently clamping title points to a watcher's remaining budget
+- Title points can now be set to 0 (server-side minimum changed from 0.1 to 0)
+- `parseFloat(val) || 1` in points input handler fixed — entering `0` no longer snaps to `1` because `0 || 1` is falsy in JavaScript
+- Wheel rotation and voting state now stored server-side in `app_settings` instead of `localStorage` — any authenticated user can recover the voting state after page reload or from another device
+
+### Added
+- Aborted filter option in the Previous Winners judgement dropdown
+
+### Changed
+- Version bumped to 1.8.7
 
 ## [1.8.5] - 2026-07-17
 

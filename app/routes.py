@@ -69,28 +69,6 @@ def _record_wheel_weights(db, participant_ids):
                    (new_avg, n + 1, pid))
 
 
-def _enforce_title_budget(db, watcher_id, points, exclude_title_id=None):
-    """Clamp title points to fit within the watcher's personal point budget."""
-    watcher = db.execute('SELECT points FROM watchers WHERE id = ?', (watcher_id,)).fetchone()
-    if not watcher:
-        return points
-    if exclude_title_id:
-        other_total = db.execute(
-            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ? AND id != ? AND archived = 0',
-            (watcher_id, exclude_title_id)
-        ).fetchone()['t']
-    else:
-        other_total = db.execute(
-            'SELECT COALESCE(SUM(points), 0) as t FROM titles WHERE watcher_id = ? AND archived = 0',
-            (watcher_id,)
-        ).fetchone()['t']
-    personal_budget = max(1, watcher['points'])
-    remaining = personal_budget - other_total
-    if remaining < 0:
-        remaining = 0
-    return round(min(points, remaining), 2)
-
-
 def reshuffle_title_order(db):
     """Randomize display_order for all non-archived titles so no one user's titles are clumped."""
     rows = db.execute('SELECT id FROM titles WHERE archived = 0 ORDER BY id').fetchall()
@@ -440,8 +418,8 @@ def add_title():
         points = float(data.get('points', 1))
     except (TypeError, ValueError):
         return jsonify({'error': 'Points must be a number'}), 400
-    if points < 0.1:
-        return jsonify({'error': 'Points must be at least 0.1'}), 400
+    if points < 0:
+        return jsonify({'error': 'Points cannot be negative'}), 400
 
     count = db.execute(
         'SELECT COUNT(*) as c FROM titles WHERE watcher_id = ? AND archived = 0', (watcher_id,)
@@ -480,8 +458,8 @@ def update_title(title_id):
             points = float(data['points'])
         except (TypeError, ValueError):
             return jsonify({'error': 'Points must be a number'}), 400
-        if points < 0.1:
-            return jsonify({'error': 'Points must be at least 0.1'}), 400
+        if points < 0:
+            return jsonify({'error': 'Points cannot be negative'}), 400
 
         updates.append('points = ?')
         params.append(points)
@@ -936,6 +914,45 @@ def pass_movie():
     socketio.emit('data_changed', {})
 
     return jsonify({'ok': True, 'winner_id': winner_id, 'streak': streak, 'points_saved': points_saved, 'returned_to': returned_to})
+
+
+# ── Incomplete Winner Recovery ──
+
+@bp.route('/spin/incomplete-winner', methods=['GET'])
+def get_incomplete_winner():
+    """Return the saved incomplete winner state, or null."""
+    db = get_db(current_app)
+    row = db.execute('SELECT value FROM app_settings WHERE key = ?', ('incomplete_winner',)).fetchone()
+    if not row:
+        return jsonify(None)
+    try:
+        return jsonify(json.loads(row['value']))
+    except (json.JSONDecodeError, TypeError):
+        return jsonify(None)
+
+
+@bp.route('/spin/incomplete-winner', methods=['PUT'])
+def save_incomplete_winner():
+    """Save incomplete winner state for crash recovery across sessions."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    db = get_db(current_app)
+    db.execute(
+        'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+        ('incomplete_winner', json.dumps(data))
+    )
+    db.commit()
+    return jsonify({'ok': True})
+
+
+@bp.route('/spin/incomplete-winner', methods=['DELETE'])
+def clear_incomplete_winner():
+    """Clear the incomplete winner state."""
+    db = get_db(current_app)
+    db.execute('DELETE FROM app_settings WHERE key = ?', ('incomplete_winner',))
+    db.commit()
+    return jsonify({'ok': True})
 
 
 # ── Admin ──
