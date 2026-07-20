@@ -15,6 +15,11 @@
 ### Changed
 - Version bumped to 1.8.7
 
+## [1.8.6] - 2026-07-17
+
+### Fixed
+- Points badge and debt tooltip now refresh when participants are added/removed via the ✕ button, Start Movie Night, or Admin panel — `fetchData()` was missing in several paths, leaving stale `owed_to`/`owed_by`/`points` computed against the old participant set
+
 ## [1.8.5] - 2026-07-17
 
 ### Fixed
