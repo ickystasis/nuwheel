@@ -1348,8 +1348,10 @@ function onSpinComplete() {
         winnerDisplay.classList.remove('hidden');
         fireConfetti();
 
-        // Store for Accept/Re-roll
-        lastWinnerInfo = { seg, totalPts };
+        // Store for Accept/Re-roll — freeze segment state so acceptResults()
+        // can redraw the wheel exactly as it landed, regardless of any
+        // data_changed updates that may have arrived in the meantime.
+        lastWinnerInfo = { seg, totalPts, frozenSegments: segments.map(s => ({...s})), frozenRotation: wheelRotation };
         isSpinning = false;
         applyWheelLock();
 
@@ -1399,6 +1401,16 @@ async function acceptResults() {
         lastWinnerInfo.totalPts, participantNames,
         watcherBudget, watcherMovieCount, wheelMovies
     );
+    // Restore the exact frozen segments and wheel rotation from when the wheel
+    // landed, so the wheel stays in place regardless of any data_changed
+    // updates that may have refreshed allWatchers in the meantime.
+    if (lastWinnerInfo.frozenSegments) {
+        segments = lastWinnerInfo.frozenSegments;
+    }
+    if (lastWinnerInfo.frozenRotation !== undefined) {
+        wheelRotation = lastWinnerInfo.frozenRotation;
+    }
+
     if (saved && saved.id) {
         lastWinnerInfo.winnerId = saved.id;
         // Store incomplete state on server for recovery across sessions
@@ -1416,9 +1428,6 @@ async function acceptResults() {
         fetchWinners();
     }
 
-    // Skip fetchData/renderAll — data hasn't changed, and re-fetching may shift
-    // segment order and make the wheel appear to jump. Keep the exact spin state.
-    computeSegments();
     renderWatchers();
     drawWheel(wheelRotation);
     if (shuffleBtn) {
@@ -2707,6 +2716,13 @@ socket.on('data_changed', () => {
     }
     const active = document.activeElement;
     if (active && active.closest('.title-row')) {
+        return;
+    }
+    if (lastWinnerInfo) {
+        // Don't refresh the canvas while a winner is pending — it would shift
+        // the wheel position under the winner display. Still fetch data so
+        // renderWatchers() gets up-to-date watchers when Accept is clicked.
+        fetchData();
         return;
     }
     fetchData().then(renderAll);
