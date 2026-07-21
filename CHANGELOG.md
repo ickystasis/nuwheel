@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.8.8] - 2026-07-21
+
+### Fixed
+- Wheel no longer jumps to a wrong position when Accept is clicked — `acceptResults()` now restores the exact frozen segment array captured at spin completion instead of calling `computeSegments()`, which could rebuild segments from stale/updated `allWatchers` and shift the wheel position
+- `data_changed` WebSocket handler no longer calls `renderAll()` while a winner is pending, preventing the wheel from being visually replaced by stale segment data between spin completion and Accept
+
+### Changed
+- Version bumped to 1.8.8
+
 ## [1.8.7] - 2026-07-20
 
 ### Fixed
