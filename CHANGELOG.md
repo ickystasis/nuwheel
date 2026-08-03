@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.1] - 2026-08-02
+
+### Fixed
+- Winner's wheel center graphic now stays locked to the exact image that was on screen when the spin was accepted — the chosen graphic filename is persisted server-side (`last_spin_winner_graphic`) alongside `last_spin_winner_id`, so a page refresh no longer re-randomizes the image. A new winner replaces it, and aborting a spin reverts to the previous committed winner's exact image.
+- Missing or deleted media never breaks the wheel: if a committed graphic file is gone it falls back to the default/admin center image, and if a picked song/cheer 404s the audio falls back to the built-in `music/`/`cheers/` pool (`mediaAudio()` helper).
+
+### Changed
+- Version bumped to 1.9.1
+
 ## [1.9.0] - 2026-08-02
 
 ### Added

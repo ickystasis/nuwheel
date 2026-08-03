@@ -148,7 +148,10 @@ async function pickMediaAudio(type) {
 
     if (prevFiles.length > 0 && Math.random() < PREV_WINNER_BIAS) {
         const f = pickRandom(prevFiles);
-        return { url: `/api/user-media/${prevId}/${type}/${encodeURIComponent(f)}` };
+        return {
+            url: `/api/user-media/${prevId}/${type}/${encodeURIComponent(f)}`,
+            defaultUrl: defaultUrl + (pickRandom(defaultFiles) || ''),
+        };
     }
 
     const f = pickRandom(defaultFiles);
@@ -156,14 +159,39 @@ async function pickMediaAudio(type) {
     return { url: defaultUrl + f };
 }
 
-async function loadWinnerGraphic(watcherId) {
+// Create an Audio element that falls back to a default-pool file if the picked
+// file is missing/deleted, so a bad upload never silences the wheel.
+function mediaAudio(src, defaultUrl) {
+    const audio = new Audio(src);
+    if (defaultUrl) {
+        audio.addEventListener('error', () => {
+            if (audio.src && audio.src !== defaultUrl) audio.src = defaultUrl;
+        });
+    }
+    return audio;
+}
+
+// Pick a random graphic filename from a winner's uploaded pool (or null if none).
+async function pickWinnerGraphic(watcherId) {
+    if (watcherId == null) return null;
+    const files = await fetchUserMedia(watcherId, 'graphic');
+    return pickRandom(files) || null;
+}
+
+async function loadWinnerGraphic(watcherId, filename) {
     let url = null;
     if (watcherId != null) {
         const files = await fetchUserMedia(watcherId, 'graphic');
-        const f = pickRandom(files);
-        if (f) url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(f)}`;
+        if (filename && files.includes(filename)) {
+            url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(filename)}`;
+        } else if (files.length > 0 && !filename) {
+            // No committed filename yet — pick one (e.g. recovered incomplete spin).
+            const f = pickRandom(files);
+            if (f) url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(f)}`;
+        }
     }
     if (!url) {
+        // Winner has no graphic (or the committed file was deleted) — revert to default.
         centerImage = adminCenterImage;
         drawWheel(wheelRotation);
         return;
@@ -188,7 +216,7 @@ async function playSpinMusic() {
         await fetchMediaLists();
         const src = await pickMediaAudio('song');
         if (!src) return;
-        spinMusicAudio = new Audio(src.url);
+        spinMusicAudio = mediaAudio(src.url, src.defaultUrl);
         spinMusicAudio.loop = true;
         spinMusicAudio.volume = 0.5;
         spinMusicAudio.currentTime = 0;
@@ -209,7 +237,7 @@ async function playCheer() {
         await fetchMediaLists();
         const src = await pickMediaAudio('cheer');
         if (!src) return;
-        cheerAudio = new Audio(src.url);
+        cheerAudio = mediaAudio(src.url, src.defaultUrl);
         cheerAudio.volume = 0.6;
         cheerAudio.currentTime = 0;
         cheerAudio.play();
@@ -262,12 +290,30 @@ async function fetchSettings() {
         if (settings.last_spin_winner_id != null) {
             lastSpinWinnerId = Number(settings.last_spin_winner_id) || null;
         }
+        if (settings.last_spin_winner_graphic != null) {
+            lastSpinWinnerGraphic = settings.last_spin_winner_graphic;
+        } else {
+            lastSpinWinnerGraphic = null;
+        }
         if (settings.center_image) {
             const img = new Image();
             img.onload = () => { adminCenterImage = img; centerImage = img; drawWheel(wheelRotation); };
             img.src = settings.center_image;
         }
-        loadWinnerGraphic(lastSpinWinnerId);
+        // If the committed winner has no stored graphic yet (e.g. seeded from
+        // history on first run), pick one and persist it so it doesn't change
+        // on every refresh.
+        if (lastSpinWinnerId != null && lastSpinWinnerGraphic == null) {
+            pickWinnerGraphic(lastSpinWinnerId).then(f => {
+                if (f) {
+                    lastSpinWinnerGraphic = f;
+                    saveSettings({ last_spin_winner_graphic: f });
+                }
+                loadWinnerGraphic(lastSpinWinnerId, lastSpinWinnerGraphic);
+            });
+        } else {
+            loadWinnerGraphic(lastSpinWinnerId, lastSpinWinnerGraphic);
+        }
     } catch (e) { /* ignore */ }
 }
 
@@ -331,7 +377,9 @@ const abortBtn = document.getElementById('abortBtn');
 const returnMsg = document.getElementById('returnMsg');
 let lastWinnerInfo = null; // {seg, totalPts, winnerId}
 let lastSpinWinnerId = null; // committed winner id (server-persisted, set only on accepted verdicts)
+let lastSpinWinnerGraphic = null; // committed winner's graphic filename (persisted alongside the winner id)
 let pendingWinnerId = null; // current spin's winner, awaiting verdict — reverted to committed on abort
+let pendingWinnerGraphic = null; // current spin's chosen graphic filename — committed only with the verdict
 
 // Wheel lock — disallow edits while spinning, voting, or a winner is pending
 function wheelLocked() {
@@ -1435,7 +1483,10 @@ function onSpinComplete() {
         const winnerWatcher = allWatchers.find(w => w.name === seg.watcherName);
         if (winnerWatcher) {
             pendingWinnerId = winnerWatcher.id;
-            loadWinnerGraphic(winnerWatcher.id);
+            pickWinnerGraphic(winnerWatcher.id).then(f => {
+                pendingWinnerGraphic = f;
+                loadWinnerGraphic(winnerWatcher.id, pendingWinnerGraphic);
+            });
         }
 
         // Store for Accept/Re-roll — freeze segment state so acceptResults()
@@ -1514,6 +1565,7 @@ async function acceptResults() {
             participantNames: participantNames,
             wheelRotation: wheelRotation,
             segmentOrder: segments.map(s => `${s.name}|${s.watcherName}`),
+            graphicFilename: pendingWinnerGraphic,
         });
         fetchWinners();
     }
@@ -1587,7 +1639,8 @@ async function abortSession() {
         // Aborted spin is invalid — revert to the previous actual winner and
         // restore their wheel graphic.
         pendingWinnerId = null;
-        loadWinnerGraphic(lastSpinWinnerId);
+        pendingWinnerGraphic = null;
+        loadWinnerGraphic(lastSpinWinnerId, lastSpinWinnerGraphic);
         if (frozenSegments) segments = frozenSegments;
         if (frozenRotation !== undefined) wheelRotation = frozenRotation;
         renderWatchers();
@@ -1612,8 +1665,13 @@ async function abortSession() {
 function commitPendingWinner() {
     if (pendingWinnerId != null) {
         lastSpinWinnerId = pendingWinnerId;
-        saveSettings({ last_spin_winner_id: pendingWinnerId });
+        lastSpinWinnerGraphic = pendingWinnerGraphic;
+        saveSettings({
+            last_spin_winner_id: pendingWinnerId,
+            last_spin_winner_graphic: pendingWinnerGraphic,
+        });
         pendingWinnerId = null;
+        pendingWinnerGraphic = null;
     }
 }
 
@@ -3143,7 +3201,8 @@ canvas.addEventListener('mousemove', (e) => {
                 const recoveredWatcher = allWatchers.find(x => x.name === info.watcherName);
                 if (recoveredWatcher) {
                     pendingWinnerId = recoveredWatcher.id;
-                    loadWinnerGraphic(recoveredWatcher.id);
+                    pendingWinnerGraphic = info.graphicFilename || null;
+                    loadWinnerGraphic(recoveredWatcher.id, pendingWinnerGraphic);
                 }
                 if (info.wheelRotation !== undefined) {
                     wheelRotation = info.wheelRotation;
