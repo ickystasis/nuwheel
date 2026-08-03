@@ -2,13 +2,61 @@ import json
 import os
 import random
 import re
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_from_directory, abort
+from werkzeug.utils import secure_filename
 from .models import get_db
 from .socketio_ext import socketio
 from . import VERSION
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 BASE_POINTS = 6
+
+MEDIA_TYPES = ('song', 'cheer', 'graphic')
+MEDIA_ALLOWED_EXT = {
+    'song': ('.mp3', '.wav'),
+    'cheer': ('.mp3', '.wav'),
+    'graphic': ('.jpg', '.jpeg', '.png'),
+}
+MEDIA_ALLOWED_MIME = {
+    'song': {'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/x-pn-wav', 'application/vnd.wave'},
+    'cheer': {'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/x-pn-wav', 'application/vnd.wave'},
+    'graphic': {'image/jpeg', 'image/pjpeg', 'image/png'},
+}
+MEDIA_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+def _media_root():
+    base = os.path.dirname(current_app.config['DATABASE'])
+    return os.path.join(base, 'media')
+
+
+def _media_dir(user_id, media_type):
+    return os.path.join(_media_root(), str(user_id), media_type)
+
+
+def _sniff_media_type(head):
+    """Identify file type from magic bytes. Returns mp3|wav|jpg|png|None."""
+    if head[:3] == b'ID3':
+        return 'mp3'
+    if len(head) >= 12 and head[:4] == b'RIFF' and head[8:12] == b'WAVE':
+        return 'wav'
+    if len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+        return 'mp3'
+    if head[:3] == b'\xff\xd8\xff':
+        return 'jpg'
+    if head[:8] == b'\x89PNG\r\n\x1a\n':
+        return 'png'
+    return None
+
+
+def _ext_to_sniff(ext):
+    return {
+        '.mp3': 'mp3',
+        '.wav': 'wav',
+        '.jpg': 'jpg',
+        '.jpeg': 'jpg',
+        '.png': 'png',
+    }.get(ext)
 
 
 def _consume_debt_entries(db, debtor_id, creditor_id, total_amount):
@@ -177,6 +225,17 @@ def get_version():
 
 # ── Settings ──
 
+def _seed_last_spin_winner(db):
+    """Derive the most recent spin winner's watcher id from winners history."""
+    row = db.execute(
+        'SELECT watcher_name FROM winners ORDER BY won_at DESC, id DESC LIMIT 1'
+    ).fetchone()
+    if not row:
+        return None
+    w = db.execute('SELECT id FROM watchers WHERE name = ?', (row['watcher_name'],)).fetchone()
+    return w['id'] if w else None
+
+
 @bp.route('/settings', methods=['GET'])
 def get_settings():
     db = get_db(current_app)
@@ -193,6 +252,13 @@ def get_settings():
         else:
             settings[key] = val
     settings['site_title'] = current_app.config.get('SITE_TITLE', 'Wheel of Doom(b)')
+    # Day-1 support: until a spin completes after this feature ships, fall back
+    # to the most recent winner from existing history so the media bias works
+    # immediately on an already-live database.
+    if 'last_spin_winner_id' not in settings:
+        last_id = _seed_last_spin_winner(db)
+        if last_id is not None:
+            settings['last_spin_winner_id'] = last_id
     return jsonify(settings)
 
 
@@ -1077,6 +1143,89 @@ def list_media(folder):
     except FileNotFoundError:
         files = []
     return jsonify(files)
+
+
+@bp.route('/user-media/<int:user_id>/<media_type>', methods=['GET'])
+def list_user_media(user_id, media_type):
+    """List a user's uploaded files for one media type (song/cheer/graphic)."""
+    if media_type not in MEDIA_TYPES:
+        return jsonify({'error': 'Invalid media type'}), 400
+    db = get_db(current_app)
+    user = db.execute('SELECT id FROM watchers WHERE id = ?', (user_id,)).fetchone()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    base = _media_dir(user_id, media_type)
+    try:
+        files = sorted(
+            f for f in os.listdir(base)
+            if os.path.isfile(os.path.join(base, f))
+            and os.path.splitext(f)[1].lower() in MEDIA_ALLOWED_EXT[media_type]
+        )
+    except FileNotFoundError:
+        files = []
+    return jsonify(files)
+
+
+@bp.route('/user-media/upload', methods=['POST'])
+def upload_user_media():
+    """Upload a media file for a user, strictly limited to allowed types."""
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'No file provided'}), 400
+
+    user_id = request.form.get('user_id')
+    media_type = request.form.get('media_type')
+    if media_type not in MEDIA_TYPES:
+        return jsonify({'error': 'Invalid media type'}), 400
+    if not user_id or not str(user_id).isdigit():
+        return jsonify({'error': 'Invalid user'}), 400
+
+    db = get_db(current_app)
+    user = db.execute('SELECT id FROM watchers WHERE id = ?', (int(user_id),)).fetchone()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    filename = secure_filename(file.filename or '')
+    if not filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in MEDIA_ALLOWED_EXT[media_type]:
+        return jsonify({'error': 'File type not allowed. Audio: .mp3/.wav, Images: .jpg/.jpeg/.png'}), 400
+
+    file.stream.seek(0, os.SEEK_END)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size > MEDIA_MAX_SIZE:
+        return jsonify({'error': 'File too large — max 50 MB'}), 400
+
+    head = file.stream.read(12)
+    file.stream.seek(0)
+    sniffed = _sniff_media_type(head)
+    if sniffed != _ext_to_sniff(ext):
+        return jsonify({'error': 'File content does not match its type'}), 400
+
+    mime = (file.mimetype or '').lower()
+    if mime and mime != 'application/octet-stream' and mime not in MEDIA_ALLOWED_MIME[media_type]:
+        return jsonify({'error': 'File type not allowed'}), 400
+
+    dest_dir = _media_dir(int(user_id), media_type)
+    os.makedirs(dest_dir, exist_ok=True)
+    file.save(os.path.join(dest_dir, filename))
+
+    socketio.emit('data_changed', {})
+    return jsonify({'ok': True, 'filename': filename, 'user_id': int(user_id), 'media_type': media_type})
+
+
+@bp.route('/user-media/<int:user_id>/<media_type>/<path:filename>', methods=['GET'])
+def get_user_media(user_id, media_type, filename):
+    """Serve an uploaded user media file."""
+    if media_type not in MEDIA_TYPES:
+        abort(404)
+    safe = secure_filename(filename)
+    if not safe:
+        abort(404)
+    dest_dir = _media_dir(user_id, media_type)
+    return send_from_directory(dest_dir, safe)
 
 
 @socketio.on('spin_completed')

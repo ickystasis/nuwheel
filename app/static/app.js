@@ -107,6 +107,7 @@ let cheerAudio = null;
 
 let spinMusicFiles = [];
 let cheerFiles = [];
+const PREV_WINNER_BIAS = 0.99;
 
 async function fetchMediaLists() {
     try {
@@ -124,12 +125,70 @@ function pickRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function playSpinMusic() {
+async function fetchUserMedia(userId, type) {
+    try {
+        const r = await fetch(`/api/user-media/${userId}/${type}`);
+        if (!r.ok) return [];
+        const list = await r.json();
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function previousWinnerId() {
+    return lastSpinWinnerId;
+}
+
+async function pickMediaAudio(type) {
+    const defaultUrl = (type === 'song' ? 'music/' : 'cheers/');
+    const defaultFiles = type === 'song' ? spinMusicFiles : cheerFiles;
+
+    const prevId = previousWinnerId();
+    let prevFiles = [];
+    if (prevId) prevFiles = await fetchUserMedia(prevId, type);
+
+    if (prevFiles.length > 0 && Math.random() < PREV_WINNER_BIAS) {
+        const f = pickRandom(prevFiles);
+        return { url: `/api/user-media/${prevId}/${type}/${encodeURIComponent(f)}` };
+    }
+
+    const f = pickRandom(defaultFiles);
+    if (!f) return null;
+    return { url: defaultUrl + f };
+}
+
+async function loadWinnerGraphic(watcherId) {
+    let url = null;
+    if (watcherId != null) {
+        const files = await fetchUserMedia(watcherId, 'graphic');
+        const f = pickRandom(files);
+        if (f) url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(f)}`;
+    }
+    if (!url) {
+        centerImage = adminCenterImage;
+        drawWheel(wheelRotation);
+        return;
+    }
+    const img = new Image();
+    img.onload = () => {
+        centerImage = img;
+        drawWheel(wheelRotation);
+    };
+    img.onerror = () => {
+        centerImage = adminCenterImage;
+        drawWheel(wheelRotation);
+    };
+    img.src = url;
+}
+
+async function playSpinMusic() {
     try {
         if (spinMusicAudio) { spinMusicAudio.pause(); spinMusicAudio = null; }
-        const file = pickRandom(spinMusicFiles);
-        if (!file) return;
-        spinMusicAudio = new Audio('music/' + file);
+        // Repopulate media lists at spin time so uploads made right before the
+        // spin are included.
+        await fetchMediaLists();
+        const src = await pickMediaAudio('song');
+        if (!src) return;
+        spinMusicAudio = new Audio(src.url);
         spinMusicAudio.loop = true;
         spinMusicAudio.volume = 0.5;
         spinMusicAudio.currentTime = 0;
@@ -143,12 +202,14 @@ function stopSpinMusic() {
     } catch (e) {}
 }
 
-function playCheer() {
+async function playCheer() {
     try {
         if (cheerAudio) { cheerAudio.pause(); cheerAudio = null; }
-        const file = pickRandom(cheerFiles);
-        if (!file) return;
-        cheerAudio = new Audio('cheers/' + file);
+        // Refresh again in case media was uploaded mid-spin.
+        await fetchMediaLists();
+        const src = await pickMediaAudio('cheer');
+        if (!src) return;
+        cheerAudio = new Audio(src.url);
         cheerAudio.volume = 0.6;
         cheerAudio.currentTime = 0;
         cheerAudio.play();
@@ -198,11 +259,15 @@ async function fetchSettings() {
         if (settings.site_title) {
             document.title = settings.site_title;
         }
+        if (settings.last_spin_winner_id != null) {
+            lastSpinWinnerId = Number(settings.last_spin_winner_id) || null;
+        }
         if (settings.center_image) {
             const img = new Image();
-            img.onload = () => { centerImage = img; drawWheel(wheelRotation); };
+            img.onload = () => { adminCenterImage = img; centerImage = img; drawWheel(wheelRotation); };
             img.src = settings.center_image;
         }
+        loadWinnerGraphic(lastSpinWinnerId);
     } catch (e) { /* ignore */ }
 }
 
@@ -227,6 +292,19 @@ const winnersList = document.getElementById('winnersList');
 const statsBtn = document.getElementById('statsBtn');
 const statsBody = document.getElementById('statsBody');
 
+// User media refs
+const mediaBtn = document.getElementById('mediaBtn');
+const mediaModal = document.getElementById('mediaModal');
+const mediaCloseBtn = document.getElementById('mediaCloseBtn');
+const mediaUserBtn = document.getElementById('mediaUserBtn');
+const mediaUserLabel = document.getElementById('mediaUserLabel');
+const mediaUserDropdown = document.getElementById('mediaUserDropdown');
+const mediaUserDropdownList = document.getElementById('mediaUserDropdownList');
+const mediaTypeSelect = document.getElementById('mediaTypeSelect');
+const mediaUploadBtn = document.getElementById('mediaUploadBtn');
+const mediaFileInput = document.getElementById('mediaFileInput');
+const mediaUploadStatus = document.getElementById('mediaUploadStatus');
+
 // Debt matrix refs
 const debtMatrixModal = document.getElementById('debtMatrixModal');
 const debtMatrixCloseBtn = document.getElementById('debtMatrixCloseBtn');
@@ -245,12 +323,15 @@ const startMovieNightBtn = document.getElementById('startMovieNightBtn');
 const bypassChecksInput = document.getElementById('bypassChecks');
 let bypassPointChecks = false;
 let centerImage = null; // uploaded center button image
+let adminCenterImage = null; // admin-configured center image (fallback when no winner graphic)
 
 // Judgement refs
 const verdictBtn = document.getElementById('verdictBtn');
 const abortBtn = document.getElementById('abortBtn');
 const returnMsg = document.getElementById('returnMsg');
 let lastWinnerInfo = null; // {seg, totalPts, winnerId}
+let lastSpinWinnerId = null; // committed winner id (server-persisted, set only on accepted verdicts)
+let pendingWinnerId = null; // current spin's winner, awaiting verdict — reverted to committed on abort
 
 // Wheel lock — disallow edits while spinning, voting, or a winner is pending
 function wheelLocked() {
@@ -1348,6 +1429,15 @@ function onSpinComplete() {
         winnerDisplay.classList.remove('hidden');
         fireConfetti();
 
+        // Show the winner's wheel graphic immediately; it stays until the next
+        // winner is chosen. The winner is only committed (last_spin_winner_id)
+        // once the verdict is actually rendered — aborted spins are reverted.
+        const winnerWatcher = allWatchers.find(w => w.name === seg.watcherName);
+        if (winnerWatcher) {
+            pendingWinnerId = winnerWatcher.id;
+            loadWinnerGraphic(winnerWatcher.id);
+        }
+
         // Store for Accept/Re-roll — freeze segment state so acceptResults()
         // can redraw the wheel exactly as it landed, regardless of any
         // data_changed updates that may have arrived in the meantime.
@@ -1485,12 +1575,26 @@ async function abortSession() {
     }
 
     setTimeout(() => {
+        // Preserve the exact landed segment order + rotation through the reset
+        // so tiles don't jump when returning to idle spin.
+        const frozenSegments = lastWinnerInfo && lastWinnerInfo.frozenSegments;
+        const frozenRotation = lastWinnerInfo && lastWinnerInfo.frozenRotation;
         showVoting = false;
         watcherVotes = {};
         isSpinning = false;
         lastWinnerInfo = null;
         clearIncompleteWinner();
-        renderAll();
+        // Aborted spin is invalid — revert to the previous actual winner and
+        // restore their wheel graphic.
+        pendingWinnerId = null;
+        loadWinnerGraphic(lastSpinWinnerId);
+        if (frozenSegments) segments = frozenSegments;
+        if (frozenRotation !== undefined) wheelRotation = frozenRotation;
+        renderWatchers();
+        drawWheel(wheelRotation);
+        if (shuffleBtn) {
+            shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0 || showVoting);
+        }
         startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
@@ -1504,6 +1608,14 @@ async function abortSession() {
 // ============================================================
 //  Render Verdict (replaces individual Pass / Punish)
 // ============================================================
+
+function commitPendingWinner() {
+    if (pendingWinnerId != null) {
+        lastSpinWinnerId = pendingWinnerId;
+        saveSettings({ last_spin_winner_id: pendingWinnerId });
+        pendingWinnerId = null;
+    }
+}
 
 async function renderVerdict() {
     if (!isAuthenticated()) return;
@@ -1587,7 +1699,11 @@ async function renderVerdict() {
             if (!res.ok) { alert(data.error || 'Punish failed'); return; }
 
             await fetchData();
-            renderAll();
+            // Keep the wheel frozen exactly as it landed — recomputing segments
+            // here would rebuild from refreshed allWatchers and shift the tiles.
+            restoreFrozenWheel();
+            renderWatchers();
+            drawWheel(wheelRotation);
             const clearedLines = (processWinCleared || []).map(c => `${c.amount} returned to ${escHtml(c.debtor_name)}`).join('<br>');
             const stolenLines = (data.stolen_from || []).map(s => `${s.amount} added to ${escHtml(s.thief_name)} (${s.total_debt} total)`).join('<br>');
             let punishDetail = '';
@@ -1603,7 +1719,11 @@ async function renderVerdict() {
             });
             const passData = await passRes.json();
             await fetchData();
-            renderAll();
+            // Keep the wheel frozen exactly as it landed — recomputing segments
+            // here would rebuild from refreshed allWatchers and shift the tiles.
+            restoreFrozenWheel();
+            renderWatchers();
+            drawWheel(wheelRotation);
             const pts = passData.points_saved || 0;
             const returnedItems = passData.returned_to || [];
             const streakMsg = passData.streak > 0 ? ` ${escHtml(seg.watcherName)}'s streak reset to 0` : '';
@@ -1620,14 +1740,27 @@ async function renderVerdict() {
         return;
     }
 
+    // Verdict rendered — the spin is now a valid, accepted winner.
+    commitPendingWinner();
+
     // Reset voting state after a short delay
     setTimeout(() => {
+        // Preserve the exact landed segment order + rotation through the reset
+        // so tiles don't jump when returning to idle spin.
+        const frozenSegments = lastWinnerInfo && lastWinnerInfo.frozenSegments;
+        const frozenRotation = lastWinnerInfo && lastWinnerInfo.frozenRotation;
         showVoting = false;
         watcherVotes = {};
         isSpinning = false;
         lastWinnerInfo = null;
         clearIncompleteWinner();
-        renderAll();
+        if (frozenSegments) segments = frozenSegments;
+        if (frozenRotation !== undefined) wheelRotation = frozenRotation;
+        renderWatchers();
+        drawWheel(wheelRotation);
+        if (shuffleBtn) {
+            shuffleBtn.classList.toggle('hidden', isSpinning || !!lastWinnerInfo || segments.length === 0 || showVoting);
+        }
         startIdleSpin();
         verdictBtn.classList.add('faded');
         verdictBtn.disabled = true;
@@ -1709,6 +1842,18 @@ function computeSegments() {
 // ============================================================
 //  Render All
 // ============================================================
+
+// Restore the exact frozen segment array + rotation captured at spin
+// completion so the wheel stays exactly as it landed, regardless of any
+// data_changed updates that may have refreshed allWatchers in the meantime.
+function restoreFrozenWheel() {
+    if (lastWinnerInfo && lastWinnerInfo.frozenSegments) {
+        segments = lastWinnerInfo.frozenSegments;
+    }
+    if (lastWinnerInfo && lastWinnerInfo.frozenRotation !== undefined) {
+        wheelRotation = lastWinnerInfo.frozenRotation;
+    }
+}
 
 function renderAll() {
     computeSegments();
@@ -2466,6 +2611,7 @@ document.getElementById('adminCenterImageInput')?.addEventListener('change', (e)
     reader.onload = (ev) => {
         const dataUrl = ev.target.result;
         img.onload = () => {
+            adminCenterImage = img;
             centerImage = img;
             drawWheel(wheelRotation);
             saveSettings({ center_image: dataUrl });
@@ -2497,6 +2643,157 @@ bypassChecksInput.addEventListener('change', () => {
 });
 renderAll();
 
+// ============================================================
+//  Events — User Media Dropdown
+// ============================================================
+
+const MEDIA_TYPES = {
+    cheer: { label: '👏 Cheer', accept: '.mp3,.wav', ext: ['.mp3', '.wav'] },
+    song: { label: '🎵 Song', accept: '.mp3,.wav', ext: ['.mp3', '.wav'] },
+    graphic: { label: '🖼️ Wheel Center Graphic', accept: '.jpg,.jpeg,.png', ext: ['.jpg', '.jpeg', '.png'] },
+};
+const MAX_MEDIA_SIZE = 50 * 1024 * 1024; // 50 MB
+
+let mediaSelectedWatcher = null;
+
+function populateMediaUserDropdown() {
+    mediaUserDropdownList.innerHTML = '';
+    const watchers = allWatchers;
+    if (watchers.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'media-user-empty';
+        empty.textContent = 'No users yet.';
+        mediaUserDropdownList.appendChild(empty);
+        return;
+    }
+    for (const w of watchers) {
+        const row = document.createElement('div');
+        row.className = 'media-user-row';
+        row.dataset.watcherId = w.id;
+
+        const swatch = document.createElement('span');
+        swatch.className = 'color-swatch';
+        swatch.style.background = w.color || '#4ECDC4';
+
+        const name = document.createElement('span');
+        name.textContent = w.name;
+
+        row.appendChild(swatch);
+        row.appendChild(name);
+        row.addEventListener('click', () => selectMediaWatcher(w));
+        mediaUserDropdownList.appendChild(row);
+    }
+}
+
+function selectMediaWatcher(w) {
+    mediaSelectedWatcher = w;
+    mediaUserLabel.textContent = w.name;
+    mediaUserDropdown.classList.add('hidden');
+    mediaTypeSelect.classList.remove('hidden');
+    mediaTypeSelect.value = '';
+    mediaUploadBtn.classList.add('hidden');
+    mediaUploadStatus.textContent = '';
+    mediaUploadStatus.style.color = '';
+}
+
+function resetMediaFlow() {
+    mediaSelectedWatcher = null;
+    mediaUserLabel.textContent = 'Select user…';
+    mediaUserDropdown.classList.add('hidden');
+    mediaTypeSelect.value = '';
+    mediaTypeSelect.classList.add('hidden');
+    mediaUploadBtn.classList.add('hidden');
+    mediaFileInput.value = '';
+    mediaUploadStatus.textContent = '';
+    mediaUploadStatus.style.color = '';
+}
+
+function openMediaModal() {
+    populateMediaUserDropdown();
+    resetMediaFlow();
+    mediaModal.classList.remove('hidden');
+}
+
+function closeMediaModal() {
+    mediaModal.classList.add('hidden');
+    mediaUserDropdown.classList.add('hidden');
+}
+
+mediaBtn.addEventListener('click', () => {
+    openMediaModal();
+});
+
+mediaCloseBtn.addEventListener('click', closeMediaModal);
+mediaModal.addEventListener('click', (e) => {
+    if (e.target === mediaModal) closeMediaModal();
+});
+
+mediaUserBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    populateMediaUserDropdown();
+    mediaUserDropdown.classList.toggle('hidden');
+});
+
+document.addEventListener('click', (e) => {
+    if (mediaUserDropdown.classList.contains('hidden')) return;
+    if (mediaUserBtn.contains(e.target) || mediaUserDropdown.contains(e.target)) return;
+    mediaUserDropdown.classList.add('hidden');
+});
+
+mediaTypeSelect.addEventListener('change', () => {
+    const type = mediaTypeSelect.value;
+    mediaUploadBtn.classList.toggle('hidden', !type);
+    mediaUploadStatus.textContent = '';
+    mediaUploadStatus.style.color = '';
+    if (type) mediaFileInput.accept = MEDIA_TYPES[type].accept;
+});
+
+mediaUploadBtn.addEventListener('click', () => {
+    mediaFileInput.value = '';
+    mediaFileInput.click();
+});
+
+mediaFileInput.addEventListener('change', async () => {
+    const file = mediaFileInput.files[0];
+    if (!file) return;
+    const type = mediaTypeSelect.value;
+    if (!mediaSelectedWatcher || !type) return;
+
+    mediaUploadStatus.style.color = '';
+    if (file.size > MAX_MEDIA_SIZE) {
+        mediaUploadStatus.style.color = '#ff6b6b';
+        mediaUploadStatus.textContent = '❌ File too large — max 50 MB.';
+        return;
+    }
+    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+    if (!MEDIA_TYPES[type].ext.includes(ext)) {
+        mediaUploadStatus.style.color = '#ff6b6b';
+        mediaUploadStatus.textContent = '❌ Only ' + MEDIA_TYPES[type].ext.join(' / ') + ' files allowed.';
+        return;
+    }
+
+    const fd = new FormData();
+    fd.append('user_id', mediaSelectedWatcher.id);
+    fd.append('media_type', type);
+    fd.append('file', file);
+
+    mediaUploadStatus.textContent = '⏳ Uploading…';
+    try {
+        const r = await fetch('/api/user-media/upload', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (r.ok) {
+            mediaUploadStatus.style.color = '#6bcb77';
+            mediaUploadStatus.textContent = '✅ Uploaded ' + file.name;
+        } else {
+            mediaUploadStatus.style.color = '#ff6b6b';
+            mediaUploadStatus.textContent = '❌ ' + (data.error || 'Upload failed');
+        }
+    } catch (e) {
+        mediaUploadStatus.style.color = '#ff6b6b';
+        mediaUploadStatus.textContent = '❌ Upload failed';
+    }
+});
+
 // Escape key for modals
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -2504,6 +2801,7 @@ document.addEventListener('keydown', (e) => {
         if (!winnersModal.classList.contains('hidden')) closeWinnersModal();
         if (!retroVoteModal.classList.contains('hidden')) retroVoteModal.classList.add('hidden');
         if (!debtMatrixModal.classList.contains('hidden')) closeDebtMatrix();
+        if (!mediaModal.classList.contains('hidden')) closeMediaModal();
     }
 });
 
@@ -2842,6 +3140,11 @@ canvas.addEventListener('mousemove', (e) => {
                     totalPts: info.totalPts,
                     winnerId: info.winnerRecordId,
                 };
+                const recoveredWatcher = allWatchers.find(x => x.name === info.watcherName);
+                if (recoveredWatcher) {
+                    pendingWinnerId = recoveredWatcher.id;
+                    loadWinnerGraphic(recoveredWatcher.id);
+                }
                 if (info.wheelRotation !== undefined) {
                     wheelRotation = info.wheelRotation;
                     drawWheel(wheelRotation);

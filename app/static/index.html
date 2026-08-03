@@ -17,6 +17,7 @@
                     <button id="statsBtn" class="btn btn-icon" title="Stats">📊</button>
                     <span style="flex:1"></span>
                     <button id="addWatcherBtn" class="btn btn-icon" title="Select Victims">👤</button>
+                    <button id="mediaBtn" class="btn btn-icon" title="User Media">🎵</button>
                     <button id="adminBtn" class="btn btn-icon hidden" title="Admin">🔧</button>
                     <button id="lockBtn" class="btn btn-icon" title="Unlock settings">🔒</button>
                 </div>
@@ -284,6 +285,40 @@
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <div id="ptsTooltip" class="pts-tooltip hidden"></div>
-    <script src="app.js?v=37"></script>
+
+    <!-- User Media Upload Modal -->
+    <div id="mediaModal" class="modal-overlay hidden">
+        <div class="modal-content" style="position:relative;max-width:480px">
+            <div class="modal-header">
+                <h2>🎵 User Media</h2>
+                <button id="mediaCloseBtn" class="modal-close-btn">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="media-upload-cell">
+                    <button id="mediaUserBtn" class="media-select" type="button">
+                        <span id="mediaUserLabel">Select user…</span>
+                    </button>
+                    <div id="mediaUserDropdown" class="media-user-dropdown hidden">
+                        <div id="mediaUserDropdownList"></div>
+                    </div>
+                </div>
+                <div class="media-upload-cell">
+                    <select id="mediaTypeSelect" class="media-select hidden">
+                        <option value="">Select media type…</option>
+                        <option value="cheer">👏 Cheer</option>
+                        <option value="song">🎵 Song</option>
+                        <option value="graphic">🖼️ Wheel Center Graphic</option>
+                    </select>
+                </div>
+                <div class="media-upload-cell">
+                    <button id="mediaUploadBtn" class="btn btn-add hidden">📤 Upload</button>
+                    <input type="file" id="mediaFileInput" style="display:none" />
+                </div>
+                <div id="mediaUploadStatus" class="media-upload-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=38"></script>
 </body>
 </html>

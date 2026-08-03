@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.9.0] - 2026-08-02
+
+### Added
+- User Media button (🎵, right toolbar, second from left) — any user can now upload personal media per watcher, opened from a modal with a cascading picker (watcher → media type → file):
+  - 👏 Cheer and 🎵 Song: `.mp3` / `.wav` up to 50 MB
+  - 🖼️ Wheel Center Graphic: `.jpg` / `.jpeg` / `.png` up to 50 MB
+  - Watcher dropdown shows each user's color swatch
+- Uploads stored server-side in `/data/media/<user_id>/<type>/` and served to all clients via new endpoints `POST /api/user-media/upload`, `GET /api/user-media/<id>/<type>`, `GET /api/user-media/<id>/<type>/<file>` — no rebuild needed to add media
+- Strict upload validation: extension allowlist, magic-byte content sniffing (`_sniff_media_type`), MIME allowlist, and a 50 MB cap (plus `client_max_body_size 50m` in nginx) — renamed/misleading files are rejected
+- Audio now prefers the previous spin winner's personal pool: 99% chance their uploaded song/cheer plays (`PREV_WINNER_BIAS = 0.99`), falling back to the built-in `music/`/`cheers/` pool if they have none or in the remaining 1%
+- Winner's uploaded graphic is shown on the wheel center the moment the spin lands and stays until the next winner is chosen (falls back to the admin center image)
+- `last_spin_winner_id` persisted server-side via `/api/settings` (replaces the old `localStorage` tracking); on first run after this release it is seeded from the most recent winner in history, so the media bias works immediately on an already-live database
+- Media lists are re-fetched at spin time (and again on cheer) so uploads made right up to the spin count
+- Tests: `tests/test_user_media.py` (12 cases: upload accept/reject paths, list/serve, last-winner seeding)
+
+### Fixed
+- Wheel tiles no longer rearrange when Render Judgement or Abandon is clicked — `renderVerdict()` and `abortSession()` now restore the exact frozen segment array + rotation captured at spin completion (via the new `restoreFrozenWheel()` helper) instead of calling `renderAll()`/`computeSegments()` after `fetchData()`, which could rebuild segments from refreshed `allWatchers` and shift the wheel position. The reset timeouts in both flows also preserve the frozen segment order when returning to idle spin. Same fix previously applied to the Accept button in 1.8.8.
+- Aborted spins are now properly invalid: the pending winner's graphic is reverted to the last accepted winner's graphic and `last_spin_winner_id` is only committed once a verdict is actually rendered
+- User media watcher dropdown no longer shows a double scrollbar — the list expands to fit all users (modal body overflow made visible)
+
+### Changed
+- Version bumped to 1.9.0
+- `backup.sh` retention extended from 14 to 365 days
+- Default `SITE_TITLE` in `docker-compose.yml` set to `nuwheel`
+
 ## [1.8.8] - 2026-07-21
 
 ### Fixed
