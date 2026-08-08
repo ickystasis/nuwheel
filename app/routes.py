@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify, current_app, send_from_directory,
 from werkzeug.utils import secure_filename
 from .models import get_db
 from .socketio_ext import socketio
+from .audio_loudness import MUSIC_LUFS, CHEER_LUFS, ffmpeg_available, normalize_audio
 from . import VERSION
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -1210,7 +1211,15 @@ def upload_user_media():
 
     dest_dir = _media_dir(int(user_id), media_type)
     os.makedirs(dest_dir, exist_ok=True)
-    file.save(os.path.join(dest_dir, filename))
+    dest_path = os.path.join(dest_dir, filename)
+    file.save(dest_path)
+
+    # Loudness-normalize audio uploads so every song/cheer sits at a consistent
+    # perceived volume regardless of what the source file was mixed like.
+    # Best-effort: on any failure the original file is kept as-is.
+    if media_type in ('song', 'cheer') and ffmpeg_available():
+        target = MUSIC_LUFS if media_type == 'song' else CHEER_LUFS
+        normalize_audio(dest_path, target_lufs=target)
 
     socketio.emit('data_changed', {})
     return jsonify({'ok': True, 'filename': filename, 'user_id': int(user_id), 'media_type': media_type})

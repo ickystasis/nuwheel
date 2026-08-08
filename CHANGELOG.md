@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.3] - 2026-08-07
+
+### Added
+- Audio is now loudness-normalized (EBU R128 via `ffmpeg loudnorm`) so every song and cheer plays at a consistent perceived volume regardless of how it was mixed:
+  - Songs normalized to **-16 LUFS**, cheers to **-14 LUFS**, with a -1.5 dB true-peak ceiling and leading/trailing silence trimmed; outputs re-encoded to 44.1 kHz stereo (same file type as the source).
+  - New `app/audio_loudness.py` helper normalizes uploads in place via `upload_media` — best-effort, the original file is kept untouched if ffmpeg fails or the container lacks it.
+  - New `normalize_media.py` batch tool to normalize existing trees (target loudness derived from directory name: `music`/`song` → -16, `cheers`/`cheer` → -14); defaults to the built-in pools + `<DB_DIR>/media`, supports `--dry-run`.
+  - `ffmpeg` added to the Docker image.
+- Tests: `tests/test_audio_loudness.py` (target mapping, wav/mp3 normalization, garbage-input safety, graceful failure).
+
+### Changed
+- Version bumped to 1.9.3
+
 ## [1.9.2] - 2026-08-07
 
 ### Fixed

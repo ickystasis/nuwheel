@@ -13,8 +13,8 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # ---- Stage 2: Runtime ----
 FROM python:3.12-alpine
 
-# Install nginx
-RUN apk add --no-cache nginx
+# Install nginx + ffmpeg (for loudness-normalizing uploaded audio)
+RUN apk add --no-cache nginx ffmpeg
 
 # Copy Python packages from builder
 COPY --from=builder /root/.local /root/.local
