@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, current_app, send_from_directory,
 from werkzeug.utils import secure_filename
 from .models import get_db
 from .socketio_ext import socketio
-from .audio_loudness import MUSIC_LUFS, CHEER_LUFS, ffmpeg_available, normalize_audio
+from .audio_loudness import MUSIC_LUFS, CHEER_LUFS, ffmpeg_available, normalize_audio, normalized_filename
 from . import VERSION
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -99,14 +99,20 @@ def _validate_media_upload(file, media_type):
 
 def _save_and_normalize_media(file, filename, media_type, dest_dir):
     """Save an upload and loudness-normalize audio so songs/cheers sit at a consistent
-    perceived volume. Best-effort: on any failure the original file is kept as-is."""
+    perceived volume. Best-effort: on any failure the original file is kept as-is.
+
+    Returns the effective filename on disk — normalized audio is renamed with an
+    N_ prefix, so the caller should report that name back.
+    """
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = os.path.join(dest_dir, filename)
     file.save(dest_path)
     if media_type in ('song', 'cheer') and ffmpeg_available():
         target = MUSIC_LUFS if media_type == 'song' else CHEER_LUFS
-        normalize_audio(dest_path, target_lufs=target)
-    return dest_path
+        ok, _ = normalize_audio(dest_path, target_lufs=target)
+        if ok:
+            filename = normalized_filename(filename)
+    return filename
 
 
 def _consume_debt_entries(db, debtor_id, creditor_id, total_amount):
@@ -1253,10 +1259,10 @@ def upload_user_media():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    _save_and_normalize_media(file, filename, media_type, _media_dir(int(user_id), media_type))
+    saved_name = _save_and_normalize_media(file, filename, media_type, _media_dir(int(user_id), media_type))
 
     socketio.emit('data_changed', {})
-    return jsonify({'ok': True, 'filename': filename, 'user_id': int(user_id), 'media_type': media_type})
+    return jsonify({'ok': True, 'filename': saved_name, 'user_id': int(user_id), 'media_type': media_type})
 
 
 @bp.route('/admin/defaults/upload', methods=['POST'])
@@ -1272,10 +1278,10 @@ def upload_default_media():
     if error:
         return jsonify({'error': error}), 400
 
-    _save_and_normalize_media(file, filename, media_type, _default_dir(media_type))
+    saved_name = _save_and_normalize_media(file, filename, media_type, _default_dir(media_type))
 
     socketio.emit('data_changed', {})
-    return jsonify({'ok': True, 'filename': filename, 'media_type': media_type})
+    return jsonify({'ok': True, 'filename': saved_name, 'media_type': media_type})
 
 
 @bp.route('/user-media/<int:user_id>/<media_type>/<path:filename>', methods=['GET'])

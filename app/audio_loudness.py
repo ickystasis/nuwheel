@@ -6,6 +6,10 @@ import tempfile
 FFMPEG = 'ffmpeg'
 AUDIO_EXTS = ('.mp3', '.wav')
 
+# Files that have been successfully loudness-normalized are renamed with this
+# prefix so it's obvious at a glance which audio has been processed.
+NORM_PREFIX = 'N_'
+
 # EBU R128 integrated loudness targets, in LUFS.
 # Music plays during the spin underneath the (presumably louder) room, so it is
 # leveled a touch quieter than cheers, which are short and punchy.
@@ -37,8 +41,19 @@ def _is_audio_file(path):
     return ext in AUDIO_EXTS
 
 
+def normalized_filename(filename):
+    """Return the name a file should use after normalization (N_ prefix, applied once)."""
+    base = os.path.basename(filename)
+    if base.startswith(NORM_PREFIX):
+        return base
+    return NORM_PREFIX + base
+
+
 def normalize_audio(path, target_lufs=MUSIC_LUFS):
-    """Normalize a single audio file to the given loudness and replace it in place.
+    """Normalize a single audio file to the given loudness.
+
+    On success the file is renamed with the N_ prefix so normalized audio is
+    easy to tell apart (a file that's already prefixed keeps its name).
 
     Returns (ok: bool, message: str).
     """
@@ -91,6 +106,9 @@ def normalize_audio(path, target_lufs=MUSIC_LUFS):
         return False, 'ffmpeg produced no output'
 
     os.replace(tmp, path)
+    new_path = os.path.join(base_dir, normalized_filename(path))
+    if new_path != path:
+        os.replace(path, new_path)
     return True, f'normalized to {target_lufs:.0f} LUFS'
 
 

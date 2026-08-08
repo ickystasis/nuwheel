@@ -80,13 +80,13 @@ def main():
                         print(f'skip     {path} (no loudness target)')
                     continue
                 if args.dry_run:
-                    print(f'would    {path} -> {target:.0f} LUFS')
+                    print(f'would    {path} -> {os.path.join(dirpath, mod.normalized_filename(name))} ({target:.0f} LUFS)')
                     stats['changed'] += 1
                     continue
                 ok, msg = mod.normalize_audio(path, target_lufs=target)
                 if ok:
                     stats['normalized'] += 1
-                    print(f'ok       {path} ({msg})')
+                    print(f'ok       {os.path.join(dirpath, mod.normalized_filename(name))} ({msg})')
                 else:
                     stats['failed'] += 1
                     print(f'FAIL     {path}: {msg}', file=sys.stderr)

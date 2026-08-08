@@ -77,7 +77,9 @@ The default song/cheer/graphic pools live in the data volume, not the repo:
 
 When a watcher has no personal media of their own, files from the matching
 default pool are used (and user uploads are loudness-normalized on the way in
-with `ffmpeg` EBU R128 normalization). You can add files to the pools two ways:
+with `ffmpeg` EBU R128 normalization). Successfully normalized audio is renamed
+with an `N_` prefix (e.g. `song.mp3` → `N_song.mp3`) so processed files are
+easy to spot. You can add files to the pools two ways:
 drop them into these folders on the `wheel-data` volume (or a bind-mounted
 `./data` directory) — available without rebuilding — or upload them from the
 Admin Panel's **Fallback Media Pools** section (🎵 Songs / 👏 Cheers / 🖼️

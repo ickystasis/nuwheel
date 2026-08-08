@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.7] - 2026-08-08
+
+### Changed
+- Successfully loudness-normalized audio is now renamed with an `N_` prefix (e.g. `song.mp3` → `N_song.mp3`) so it's easy to tell processed files apart at a glance. The prefix is applied exactly once (`N_...` files keep their name), and only when normalization actually succeeded — failed or missing-ffmpeg uploads keep their original name (still best-effort).
+- Upload endpoints (`/api/user-media/upload`, `/api/admin/defaults/upload`) now report the final on-disk filename so the stored name matches what's served. The `normalize_media.py` batch tool shows the prefixed target name in dry-run and after normalizing.
+
+### Version
+- Bumped to 1.9.7
+
 ## [1.9.6] - 2026-08-08
 
 ### Fixed
