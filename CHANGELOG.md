@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.4] - 2026-08-07
+
+### Changed
+- Default media pools (songs, cheers, graphics) moved out of the repo/static folder into the data volume: `data/media/default/{song,cheer,graphic}` (`<DB_DIR>/media/default/...` at runtime). Media is no longer bundled in the Docker image — drop your own files into these folders on the `wheel-data` volume to populate defaults.
+- `GET /api/media/<type>` now lists the default pool by media type (`song`/`cheer`/`graphic`), and defaults are served from the pool via new `GET /api/media/<type>/<file>` (the old static `music`/`cheers` endpoints are gone).
+- New default **graphic** pool: watchers with no uploaded graphic fall back to a random default-pool graphic before the admin center image, and selections persist (`default:<file>` values) so they don't re-randomize on refresh.
+- Frontend default audio URLs point at the new `/api/media/{song,cheer}/` endpoints.
+- The previously bundled `.wav` files were removed from the repo (they live in the gitignored local `data/` tree for seeding a server volume); `data/` added to `.gitignore`.
+- README and `docker-compose.yml` updated for the new media layout; `normalize_media.py` defaults point at `data/media/default`.
+
+### Version
+- Bumped to 1.9.4
+
 ## [1.9.3] - 2026-08-07
 
 ### Added
