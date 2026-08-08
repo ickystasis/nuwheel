@@ -109,11 +109,20 @@ let spinMusicFiles = [];
 let cheerFiles = [];
 const WINNER_MEDIA_BIAS = 0.99;
 
+async function fetchDefaultMedia(mediaType) {
+    try {
+        const r = await fetch(`/api/media/${mediaType}`);
+        if (!r.ok) return [];
+        const list = await r.json();
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
 async function fetchMediaLists() {
     try {
         const [music, cheers] = await Promise.all([
-            fetch('/api/media/music').then(r => r.json()),
-            fetch('/api/media/cheers').then(r => r.json()),
+            fetchDefaultMedia('song'),
+            fetchDefaultMedia('cheer'),
         ]);
         spinMusicFiles = music;
         cheerFiles = cheers;
@@ -139,7 +148,7 @@ function previousWinnerId() {
 }
 
 async function pickMediaAudio(type, preferredId = null) {
-    const defaultUrl = (type === 'song' ? 'music/' : 'cheers/');
+    const defaultUrl = (type === 'song' ? '/api/media/song/' : '/api/media/cheer/');
     const defaultFiles = type === 'song' ? spinMusicFiles : cheerFiles;
 
     const prevId = preferredId != null ? preferredId : previousWinnerId();
@@ -171,27 +180,41 @@ function mediaAudio(src, defaultUrl) {
     return audio;
 }
 
-// Pick a random graphic filename from a winner's uploaded pool (or null if none).
+// Pick a graphic from a winner's uploaded pool, falling back to a random
+// default-pool graphic. Returns a user filename or 'default:<file>'.
 async function pickWinnerGraphic(watcherId) {
     if (watcherId == null) return null;
     const files = await fetchUserMedia(watcherId, 'graphic');
-    return pickRandom(files) || null;
+    if (files.length > 0) return pickRandom(files);
+    const defaults = await fetchDefaultMedia('graphic');
+    if (defaults.length > 0) return 'default:' + pickRandom(defaults);
+    return null;
 }
 
-async function loadWinnerGraphic(watcherId, filename) {
-    let url = null;
-    if (watcherId != null) {
-        const files = await fetchUserMedia(watcherId, 'graphic');
-        if (filename && files.includes(filename)) {
-            url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(filename)}`;
-        } else if (files.length > 0 && !filename) {
-            // No committed filename yet — pick one (e.g. recovered incomplete spin).
-            const f = pickRandom(files);
-            if (f) url = `/api/user-media/${watcherId}/graphic/${encodeURIComponent(f)}`;
-        }
+function graphicUrlFromValue(watcherId, graphic) {
+    if (!graphic) return null;
+    if (graphic.startsWith('default:')) {
+        return `/api/media/graphic/${encodeURIComponent(graphic.slice('default:'.length))}`;
+    }
+    if (watcherId == null) return null;
+    return `/api/user-media/${watcherId}/graphic/${encodeURIComponent(graphic)}`;
+}
+
+async function loadWinnerGraphic(watcherId, graphic) {
+    let val = graphic;
+    if (val == null && watcherId != null) {
+        // No committed filename yet — pick one (e.g. recovered incomplete spin).
+        val = await pickWinnerGraphic(watcherId);
+    }
+    let url = graphicUrlFromValue(watcherId, val);
+    if (!url) {
+        // Winner has no graphic anywhere (or the committed file was deleted) —
+        // fall back to a random default-pool graphic, then the admin image.
+        const defaults = await fetchDefaultMedia('graphic');
+        const f = pickRandom(defaults);
+        if (f) url = `/api/media/graphic/${encodeURIComponent(f)}`;
     }
     if (!url) {
-        // Winner has no graphic (or the committed file was deleted) — revert to default.
         centerImage = adminCenterImage;
         drawWheel(wheelRotation);
         return;

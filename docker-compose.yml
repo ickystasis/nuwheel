@@ -10,13 +10,11 @@ services:
     ports:
       - "9642:9642"
     volumes:
-      # Persist SQLite database on host
+      # Persist SQLite database AND all media (uploaded user media + the
+      # default song/cheer/graphic pools under media/default) on the host volume
       - wheel-data:/data
       # OR: uncomment below to use a local directory instead
       # - ./data:/data
-      # Mount music/cheers directories so you can add .wav files without rebuilding
-      # - ./app/static/music:/app/app/static/music
-      # - ./app/static/cheers:/app/app/static/cheers
     restart: unless-stopped
     environment:
       - DB_DIR=/data

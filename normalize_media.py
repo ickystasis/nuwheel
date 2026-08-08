@@ -8,12 +8,11 @@ Target loudness is derived from the directory name the file lives under:
 Usage:
     python normalize_media.py [ROOT ...] [--dry-run]
 
-If no roots are given, this normalizes the built-in pools
-(app/static/music, app/static/cheers) plus the user-media tree at
-<DB_DIR>/media when it exists (DB_DIR defaults to /data).
+If no roots are given, this normalizes the default pools
+(data/media/default) plus the user-media tree at <DB_DIR>/media when it
+exists (DB_DIR defaults to /data).
 
-Run it inside the container after pulling new media, or on a host copy of the
-media tree. Files in directories that don't map to a target are left alone.
+Files in directories that don't map to a target are left alone.
 """
 
 import argparse
@@ -56,8 +55,7 @@ def main():
     roots = list(args.roots)
     if not roots:
         roots = [
-            os.path.join(HERE, 'app', 'static', 'music'),
-            os.path.join(HERE, 'app', 'static', 'cheers'),
+            os.path.join(HERE, 'data', 'media', 'default'),
         ]
         data_media = os.path.join(os.environ.get('DB_DIR', '/data'), 'media')
         if os.path.isdir(data_media):

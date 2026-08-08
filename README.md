@@ -65,16 +65,21 @@ Open http://localhost:5000
 | `ADMIN_PASSWORD` | `setadminpass` | Password for the admin panel |
 | `SITE_TITLE` | `nuwheel` | Browser tab title |
 
-### Audio Volume Mounts
+### Default Media Pools
 
-Mount custom `.wav` files without rebuilding the container by uncommenting these volumes in `docker-compose.yml`:
+The default song/cheer/graphic pools live in the data volume, not the repo:
 
-| Host path | Container path | Purpose |
-|-----------|----------------|---------|
-| `./app/static/music` | `/app/app/static/music` | Spin music (played during wheel animation) |
-| `./app/static/cheers` | `/app/app/static/cheers` | Victory cheers (played on winner reveal) |
+| Media type | Path under `<DB_DIR>` (default `/data/media`) |
+|-----------|--------|
+| Spin music | `default/song/` (`.mp3` / `.wav`) |
+| Victory cheers | `default/cheer/` (`.mp3` / `.wav`) |
+| Default center graphics | `default/graphic/` (`.jpg` / `.jpeg` / `.png`) |
 
-Place your `.wav` files directly in the host directories (e.g. `./app/static/music/`).
+When a watcher has no personal media of their own, files from the matching
+default pool are used (and user uploads are loudness-normalized on the way in
+with `ffmpeg` EBU R128 normalization). Drop your own files into these folders
+on the `wheel-data` volume (or a bind-mounted `./data` directory) and they're
+available without rebuilding; `.wav`/`.mp3` songs play as default spin music.
 
 ## API Endpoints
 

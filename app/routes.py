@@ -35,6 +35,10 @@ def _media_dir(user_id, media_type):
     return os.path.join(_media_root(), str(user_id), media_type)
 
 
+def _default_dir(media_type):
+    return os.path.join(_media_root(), 'default', media_type)
+
+
 def _sniff_media_type(head):
     """Identify file type from magic bytes. Returns mp3|wav|jpg|png|None."""
     if head[:3] == b'ID3':
@@ -1133,17 +1137,36 @@ def update_debt():
     return jsonify({'ok': True, 'debtor_id': debtor_id, 'creditor_id': creditor_id, 'amount': amount})
 
 
-@bp.route('/media/<folder>', methods=['GET'])
-def list_media(folder):
-    """List .wav files in static subfolder (music/ or cheers/)."""
-    if folder not in ('music', 'cheers'):
-        return jsonify({'error': 'Invalid folder'}), 400
-    base = os.path.join(os.path.dirname(__file__), 'static', folder)
+@bp.route('/media/<media_type>', methods=['GET'])
+def list_media(media_type):
+    """List the default-pool files for a media type (song/cheer/graphic).
+
+    Defaults live in <media_root>/default/<media_type>, shared by all watchers
+    and used when a watcher has no uploaded media of their own.
+    """
+    if media_type not in MEDIA_TYPES:
+        return jsonify({'error': 'Invalid media type'}), 400
+    base = _default_dir(media_type)
     try:
-        files = sorted(f for f in os.listdir(base) if f.endswith('.wav'))
+        files = sorted(
+            f for f in os.listdir(base)
+            if os.path.isfile(os.path.join(base, f))
+            and os.path.splitext(f)[1].lower() in MEDIA_ALLOWED_EXT[media_type]
+        )
     except FileNotFoundError:
         files = []
     return jsonify(files)
+
+
+@bp.route('/media/<media_type>/<path:filename>', methods=['GET'])
+def get_media(media_type, filename):
+    """Serve a file from the default-pool directory."""
+    if media_type not in MEDIA_TYPES:
+        abort(404)
+    safe = secure_filename(filename)
+    if not safe:
+        abort(404)
+    return send_from_directory(_default_dir(media_type), safe)
 
 
 @bp.route('/user-media/<int:user_id>/<media_type>', methods=['GET'])
