@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.2] - 2026-08-07
+
+### Fixed
+- The winning cheer now plays the **new** winner's cheer pool instead of the previous winner's. `pickMediaAudio()` now accepts an explicit winner id (`preferredId`), and `onSpinComplete()` passes the landed winner's id to `playCheer()`, so the cheer fires with the new winner's center-image swap. Spin music still biases toward the previous winner.
+- `PREV_WINNER_BIAS` renamed to `WINNER_MEDIA_BIAS` to reflect that the bias now targets whichever winner's media is being played (previous for the spin song, the reveal winner for the cheer).
+
+### Changed
+- Version bumped to 1.9.2
+
 ## [1.9.1] - 2026-08-02
 
 ### Fixed

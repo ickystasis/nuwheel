@@ -107,7 +107,7 @@ let cheerAudio = null;
 
 let spinMusicFiles = [];
 let cheerFiles = [];
-const PREV_WINNER_BIAS = 0.99;
+const WINNER_MEDIA_BIAS = 0.99;
 
 async function fetchMediaLists() {
     try {
@@ -138,15 +138,15 @@ function previousWinnerId() {
     return lastSpinWinnerId;
 }
 
-async function pickMediaAudio(type) {
+async function pickMediaAudio(type, preferredId = null) {
     const defaultUrl = (type === 'song' ? 'music/' : 'cheers/');
     const defaultFiles = type === 'song' ? spinMusicFiles : cheerFiles;
 
-    const prevId = previousWinnerId();
+    const prevId = preferredId != null ? preferredId : previousWinnerId();
     let prevFiles = [];
     if (prevId) prevFiles = await fetchUserMedia(prevId, type);
 
-    if (prevFiles.length > 0 && Math.random() < PREV_WINNER_BIAS) {
+    if (prevFiles.length > 0 && Math.random() < WINNER_MEDIA_BIAS) {
         const f = pickRandom(prevFiles);
         return {
             url: `/api/user-media/${prevId}/${type}/${encodeURIComponent(f)}`,
@@ -230,12 +230,12 @@ function stopSpinMusic() {
     } catch (e) {}
 }
 
-async function playCheer() {
+async function playCheer(winnerId) {
     try {
         if (cheerAudio) { cheerAudio.pause(); cheerAudio = null; }
         // Refresh again in case media was uploaded mid-spin.
         await fetchMediaLists();
-        const src = await pickMediaAudio('cheer');
+        const src = await pickMediaAudio('cheer', winnerId);
         if (!src) return;
         cheerAudio = mediaAudio(src.url, src.defaultUrl);
         cheerAudio.volume = 0.6;
@@ -1467,7 +1467,6 @@ function spinWheel() {
 
 function onSpinComplete() {
     stopSpinMusic();
-    playCheer();
     const idx = getWinnerSegmentIndex();
     if (idx >= 0 && idx < segments.length) {
         const seg = segments[idx];
@@ -1481,6 +1480,7 @@ function onSpinComplete() {
         // winner is chosen. The winner is only committed (last_spin_winner_id)
         // once the verdict is actually rendered — aborted spins are reverted.
         const winnerWatcher = allWatchers.find(w => w.name === seg.watcherName);
+        playCheer(winnerWatcher ? winnerWatcher.id : null);
         if (winnerWatcher) {
             pendingWinnerId = winnerWatcher.id;
             pickWinnerGraphic(winnerWatcher.id).then(f => {
