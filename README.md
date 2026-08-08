@@ -77,9 +77,12 @@ The default song/cheer/graphic pools live in the data volume, not the repo:
 
 When a watcher has no personal media of their own, files from the matching
 default pool are used (and user uploads are loudness-normalized on the way in
-with `ffmpeg` EBU R128 normalization). Drop your own files into these folders
-on the `wheel-data` volume (or a bind-mounted `./data` directory) and they're
-available without rebuilding; `.wav`/`.mp3` songs play as default spin music.
+with `ffmpeg` EBU R128 normalization). You can add files to the pools two ways:
+drop them into these folders on the `wheel-data` volume (or a bind-mounted
+`./data` directory) — available without rebuilding — or upload them from the
+Admin Panel's **Default Media Pools** section (🎵 Songs / 👏 Cheers / 🖼️
+Graphics). Admin-panel uploads go through the same validation and audio
+loudness-normalization as per-watcher uploads.
 
 ## API Endpoints
 
@@ -107,6 +110,7 @@ available without rebuilding; `.wav`/`.mp3` songs play as default spin music.
 | GET | `/api/debts` | Full debt matrix |
 | PATCH | `/api/debts` | Update a single debt cell |
 | POST | `/api/admin/verify` | Verify admin password |
+| POST | `/api/admin/defaults/upload` | Upload to shared default pool (song/cheer/graphic), loudness-normalized |
 
 ## Project Structure
 

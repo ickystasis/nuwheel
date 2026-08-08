@@ -2995,6 +2995,7 @@ async function openAdminModal() {
     const ok = await verifyAdminPassword();
     if (!ok) return;
     renderAdminWatchers();
+    renderAdminDefaultMedia();
     try {
         const res = await fetch('/api/version');
         const data = await res.json();
@@ -3002,6 +3003,72 @@ async function openAdminModal() {
     } catch { /* ignore */ }
     adminModal.classList.remove('hidden');
 }
+
+async function renderAdminDefaultMedia() {
+    const listEl = document.getElementById('adminDefaultMediaList');
+    try {
+        const [songs, cheers, graphics] = await Promise.all([
+            fetchDefaultMedia('song'),
+            fetchDefaultMedia('cheer'),
+            fetchDefaultMedia('graphic'),
+        ]);
+        listEl.textContent = `Songs: ${songs.length} · Cheers: ${cheers.length} · Graphics: ${graphics.length}`;
+    } catch {
+        listEl.textContent = '';
+    }
+}
+
+async function adminUploadDefaultMedia(mediaType, file) {
+    const statusEl = document.getElementById('adminDefaultMediaStatus');
+    if (!file) return;
+    const typeDef = MEDIA_TYPES[mediaType];
+    if (file.size > MAX_MEDIA_SIZE) {
+        statusEl.style.color = '#ff6b6b';
+        statusEl.textContent = '❌ File too large — max 50 MB.';
+        return;
+    }
+    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+    if (!typeDef.ext.includes(ext)) {
+        statusEl.style.color = '#ff6b6b';
+        statusEl.textContent = '❌ Only ' + typeDef.ext.join(' / ') + ' files allowed.';
+        return;
+    }
+
+    const fd = new FormData();
+    fd.append('media_type', mediaType);
+    fd.append('file', file);
+
+    statusEl.style.color = '';
+    statusEl.textContent = '⏳ Uploading ' + file.name + '…';
+    try {
+        const r = await fetch('/api/admin/defaults/upload', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (r.ok) {
+            statusEl.style.color = '#6bcb77';
+            statusEl.textContent = '✅ Uploaded ' + file.name;
+            await Promise.all([fetchMediaLists(), renderAdminDefaultMedia()]);
+        } else {
+            statusEl.style.color = '#ff6b6b';
+            statusEl.textContent = '❌ ' + (data.error || 'Upload failed');
+        }
+    } catch (e) {
+        statusEl.style.color = '#ff6b6b';
+        statusEl.textContent = '❌ Upload failed';
+    }
+}
+
+document.getElementById('adminDefaultSongInput')?.addEventListener('change', (e) => {
+    adminDefaultUploadMedia('song', e.target.files[0]);
+    e.target.value = '';
+});
+document.getElementById('adminDefaultCheerInput')?.addEventListener('change', (e) => {
+    adminDefaultUploadMedia('cheer', e.target.files[0]);
+    e.target.value = '';
+});
+document.getElementById('adminDefaultGraphicInput')?.addEventListener('change', (e) => {
+    adminDefaultUploadMedia('graphic', e.target.files[0]);
+    e.target.value = '';
+})
 
 lockBtn.addEventListener('click', async () => {
     if (isAuthenticated()) {

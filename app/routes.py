@@ -64,6 +64,51 @@ def _ext_to_sniff(ext):
     }.get(ext)
 
 
+def _validate_media_upload(file, media_type):
+    """Validate an uploaded media file. Returns (filename, None) on success, (None, error) on failure."""
+    if not file or not file.filename:
+        return None, 'No file provided'
+    if media_type not in MEDIA_TYPES:
+        return None, 'Invalid media type'
+
+    filename = secure_filename(file.filename or '')
+    if not filename:
+        return None, 'Invalid filename'
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in MEDIA_ALLOWED_EXT[media_type]:
+        return None, 'File type not allowed. Audio: .mp3/.wav, Images: .jpg/.jpeg/.png'
+
+    file.stream.seek(0, os.SEEK_END)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size > MEDIA_MAX_SIZE:
+        return None, 'File too large — max 50 MB'
+
+    head = file.stream.read(12)
+    file.stream.seek(0)
+    sniffed = _sniff_media_type(head)
+    if sniffed != _ext_to_sniff(ext):
+        return None, 'File content does not match its type'
+
+    mime = (file.mimetype or '').lower()
+    if mime and mime != 'application/octet-stream' and mime not in MEDIA_ALLOWED_MIME[media_type]:
+        return None, 'File type not allowed'
+
+    return filename, None
+
+
+def _save_and_normalize_media(file, filename, media_type, dest_dir):
+    """Save an upload and loudness-normalize audio so songs/cheers sit at a consistent
+    perceived volume. Best-effort: on any failure the original file is kept as-is."""
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_path = os.path.join(dest_dir, filename)
+    file.save(dest_path)
+    if media_type in ('song', 'cheer') and ffmpeg_available():
+        target = MUSIC_LUFS if media_type == 'song' else CHEER_LUFS
+        normalize_audio(dest_path, target_lufs=target)
+    return dest_path
+
+
 def _consume_debt_entries(db, debtor_id, creditor_id, total_amount):
     """FIFO: mark oldest active punish entries as consumed up to total_amount."""
     entries = db.execute(
@@ -1194,13 +1239,12 @@ def list_user_media(user_id, media_type):
 def upload_user_media():
     """Upload a media file for a user, strictly limited to allowed types."""
     file = request.files.get('file')
-    if not file or not file.filename:
-        return jsonify({'error': 'No file provided'}), 400
-
     user_id = request.form.get('user_id')
     media_type = request.form.get('media_type')
-    if media_type not in MEDIA_TYPES:
-        return jsonify({'error': 'Invalid media type'}), 400
+
+    filename, error = _validate_media_upload(file, media_type)
+    if error:
+        return jsonify({'error': error}), 400
     if not user_id or not str(user_id).isdigit():
         return jsonify({'error': 'Invalid user'}), 400
 
@@ -1209,43 +1253,29 @@ def upload_user_media():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    filename = secure_filename(file.filename or '')
-    if not filename:
-        return jsonify({'error': 'Invalid filename'}), 400
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in MEDIA_ALLOWED_EXT[media_type]:
-        return jsonify({'error': 'File type not allowed. Audio: .mp3/.wav, Images: .jpg/.jpeg/.png'}), 400
-
-    file.stream.seek(0, os.SEEK_END)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > MEDIA_MAX_SIZE:
-        return jsonify({'error': 'File too large — max 50 MB'}), 400
-
-    head = file.stream.read(12)
-    file.stream.seek(0)
-    sniffed = _sniff_media_type(head)
-    if sniffed != _ext_to_sniff(ext):
-        return jsonify({'error': 'File content does not match its type'}), 400
-
-    mime = (file.mimetype or '').lower()
-    if mime and mime != 'application/octet-stream' and mime not in MEDIA_ALLOWED_MIME[media_type]:
-        return jsonify({'error': 'File type not allowed'}), 400
-
-    dest_dir = _media_dir(int(user_id), media_type)
-    os.makedirs(dest_dir, exist_ok=True)
-    dest_path = os.path.join(dest_dir, filename)
-    file.save(dest_path)
-
-    # Loudness-normalize audio uploads so every song/cheer sits at a consistent
-    # perceived volume regardless of what the source file was mixed like.
-    # Best-effort: on any failure the original file is kept as-is.
-    if media_type in ('song', 'cheer') and ffmpeg_available():
-        target = MUSIC_LUFS if media_type == 'song' else CHEER_LUFS
-        normalize_audio(dest_path, target_lufs=target)
+    _save_and_normalize_media(file, filename, media_type, _media_dir(int(user_id), media_type))
 
     socketio.emit('data_changed', {})
     return jsonify({'ok': True, 'filename': filename, 'user_id': int(user_id), 'media_type': media_type})
+
+
+@bp.route('/admin/defaults/upload', methods=['POST'])
+def upload_default_media():
+    """Upload a media file to the shared default pool (song/cheer/graphic).
+
+    Audio uploads are loudness-normalized exactly like per-watcher uploads.
+    """
+    file = request.files.get('file')
+    media_type = request.form.get('media_type')
+
+    filename, error = _validate_media_upload(file, media_type)
+    if error:
+        return jsonify({'error': error}), 400
+
+    _save_and_normalize_media(file, filename, media_type, _default_dir(media_type))
+
+    socketio.emit('data_changed', {})
+    return jsonify({'ok': True, 'filename': filename, 'media_type': media_type})
 
 
 @bp.route('/user-media/<int:user_id>/<media_type>/<path:filename>', methods=['GET'])

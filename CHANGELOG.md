@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.5] - 2026-08-07
+
+### Added
+- Admin Panel now has a **Default Media Pools** section for uploading shared default songs, cheers, and graphics without touching the server volume. Uploads go to `<DB_DIR>/media/default/{song,cheer,graphic}` and are validated exactly like per-watcher uploads (extension allowlist, magic-byte sniffing, MIME allowlist, 50 MB cap) via the new `POST /api/admin/defaults/upload` endpoint.
+- Audio uploaded to the default pools is loudness-normalized just like per-watcher audio (songs → -16 LUFS, cheers → -14 LUFS via `ffmpeg` EBU R128, best-effort). Validation/save logic shared with user uploads through `_validate_media_upload` / `_save_and_normalize_media` helpers in `app/routes.py`.
+- After a default upload the frontend refreshes the song/cheer pools and shows live pool counts (songs/cheers/graphics) in the admin panel.
+- Tests: 4 new cases in `tests/test_user_media.py` for default-pool upload/list/serve and rejection paths.
+
+### Version
+- Bumped to 1.9.5
+
 ## [1.9.4] - 2026-08-07
 
 ### Changed

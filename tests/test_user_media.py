@@ -99,6 +99,43 @@ class UserMediaTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def _upload_default(self, media_type, filename, content):
+        return self.client.post(
+            '/api/admin/defaults/upload',
+            data={
+                'media_type': media_type,
+                'file': (io.BytesIO(content), filename),
+            },
+            content_type='multipart/form-data',
+        )
+
+    def test_default_media_upload_and_list(self):
+        resp = self._upload_default('song', 'default-tune.mp3', b'ID3\x04\x00\x00\x00fake')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()['ok'])
+        self.assertEqual(resp.get_json()['media_type'], 'song')
+
+        listing = self.client.get('/api/media/song')
+        self.assertEqual(listing.status_code, 200)
+        self.assertIn('default-tune.mp3', listing.get_json())
+
+        fetched = self.client.get('/api/media/song/default-tune.mp3')
+        self.assertEqual(fetched.data, b'ID3\x04\x00\x00\x00fake')
+
+    def test_default_graphic_upload(self):
+        resp = self._upload_default('graphic', 'wheel.png', b'\x89PNG\r\n\x1a\nfake')
+        self.assertEqual(resp.status_code, 200)
+        listing = self.client.get('/api/media/graphic')
+        self.assertIn('wheel.png', listing.get_json())
+
+    def test_default_upload_rejects_bad_content(self):
+        resp = self._upload_default('song', 'tune.mp3', b'NOTANMP3FILE!!')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_default_upload_rejects_bad_type(self):
+        resp = self._upload_default('video', 'tune.mp3', b'ID3\x04\x00\x00\x00fake')
+        self.assertEqual(resp.status_code, 400)
+
     def test_last_spin_winner_seeded_from_history(self):
         from app.models import get_db
         with self.app.app_context():
