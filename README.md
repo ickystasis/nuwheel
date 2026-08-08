@@ -65,7 +65,7 @@ Open http://localhost:5000
 | `ADMIN_PASSWORD` | `setadminpass` | Password for the admin panel |
 | `SITE_TITLE` | `nuwheel` | Browser tab title |
 
-### Default Media Pools
+### Fallback Media Pools
 
 The default song/cheer/graphic pools live in the data volume, not the repo:
 
@@ -80,7 +80,7 @@ default pool are used (and user uploads are loudness-normalized on the way in
 with `ffmpeg` EBU R128 normalization). You can add files to the pools two ways:
 drop them into these folders on the `wheel-data` volume (or a bind-mounted
 `./data` directory) — available without rebuilding — or upload them from the
-Admin Panel's **Default Media Pools** section (🎵 Songs / 👏 Cheers / 🖼️
+Admin Panel's **Fallback Media Pools** section (🎵 Songs / 👏 Cheers / 🖼️
 Graphics). Admin-panel uploads go through the same validation and audio
 loudness-normalization as per-watcher uploads.
 

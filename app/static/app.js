@@ -3058,15 +3058,15 @@ async function adminUploadDefaultMedia(mediaType, file) {
 }
 
 document.getElementById('adminDefaultSongInput')?.addEventListener('change', (e) => {
-    adminDefaultUploadMedia('song', e.target.files[0]);
+    adminUploadDefaultMedia('song', e.target.files[0]);
     e.target.value = '';
 });
 document.getElementById('adminDefaultCheerInput')?.addEventListener('change', (e) => {
-    adminDefaultUploadMedia('cheer', e.target.files[0]);
+    adminUploadDefaultMedia('cheer', e.target.files[0]);
     e.target.value = '';
 });
 document.getElementById('adminDefaultGraphicInput')?.addEventListener('change', (e) => {
-    adminDefaultUploadMedia('graphic', e.target.files[0]);
+    adminUploadDefaultMedia('graphic', e.target.files[0]);
     e.target.value = '';
 })
 

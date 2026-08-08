@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.6] - 2026-08-08
+
+### Fixed
+- Admin Panel default-media uploads were broken: the three file-input handlers called a non-existent function name (`adminDefaultUploadMedia`), so picking a file threw a `ReferenceError` and did nothing. Handlers now call `adminUploadDefaultMedia`, and uploads save + loudness-normalize as intended.
+
+### Changed
+- Admin Panel wording updated to make the fallback behavior explicit: "Default Media Pools" → **Fallback Media Pools**, with **Fallback Songs**, **Fallback Cheers**, **Fallback Graphics** upload rows. README section renamed to match.
+
+### Version
+- Bumped to 1.9.6
+
 ## [1.9.5] - 2026-08-07
 
 ### Added
