@@ -215,7 +215,7 @@ async function loadWinnerGraphic(watcherId, graphic) {
         if (f) url = `/api/media/graphic/${encodeURIComponent(f)}`;
     }
     if (!url) {
-        centerImage = adminCenterImage;
+        centerImage = null;
         drawWheel(wheelRotation);
         return;
     }
@@ -225,7 +225,7 @@ async function loadWinnerGraphic(watcherId, graphic) {
         drawWheel(wheelRotation);
     };
     img.onerror = () => {
-        centerImage = adminCenterImage;
+        centerImage = null;
         drawWheel(wheelRotation);
     };
     img.src = url;
@@ -318,11 +318,6 @@ async function fetchSettings() {
         } else {
             lastSpinWinnerGraphic = null;
         }
-        if (settings.center_image) {
-            const img = new Image();
-            img.onload = () => { adminCenterImage = img; centerImage = img; drawWheel(wheelRotation); };
-            img.src = settings.center_image;
-        }
         // If the committed winner has no stored graphic yet (e.g. seeded from
         // history on first run), pick one and persist it so it doesn't change
         // on every refresh.
@@ -391,8 +386,7 @@ const addNewWatcherBtn = document.getElementById('addNewWatcherBtn');
 const startMovieNightBtn = document.getElementById('startMovieNightBtn');
 const bypassChecksInput = document.getElementById('bypassChecks');
 let bypassPointChecks = false;
-let centerImage = null; // uploaded center button image
-let adminCenterImage = null; // admin-configured center image (fallback when no winner graphic)
+let centerImage = null; // current wheel hub image (winner/default graphic), may stay null until a reveal
 
 // Judgement refs
 const verdictBtn = document.getElementById('verdictBtn');
@@ -2681,26 +2675,6 @@ async function recordRetroVote() {
     retroVoteProposerName = null;
     retroVotes = {};
 }
-
-// Image upload for center button (persisted server-side)
-document.getElementById('adminCenterImageInput')?.addEventListener('change', (e) => {
-    if (!isAuthenticated()) return;
-    const file = e.target.files[0];
-    if (!file) return;
-    const img = new Image();
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        img.onload = () => {
-            adminCenterImage = img;
-            centerImage = img;
-            drawWheel(wheelRotation);
-            saveSettings({ center_image: dataUrl });
-        };
-        img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
-});
 
 // ============================================================
 //  Events — Participants Modal

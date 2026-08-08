@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.8] - 2026-08-08
+
+### Changed
+- Removed the **Wheel Center Image** section from the Admin Panel — its role is taken over by the Fallback Graphics pool, which now drives the wheel hub. Dropped supporting frontend code (`adminCenterImage`, the `center_image` settings load/save, and the upload handler); the wheel hub is served by winner graphics / fallback graphics only and falls back to the plain hub rendering when nothing is set. Stale `center_image` values left in the DB from older versions are simply ignored.
+
+### Version
+- Bumped to 1.9.8
+
 ## [1.9.7] - 2026-08-08
 
 ### Changed

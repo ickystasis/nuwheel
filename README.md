@@ -91,7 +91,7 @@ loudness-normalization as per-watcher uploads.
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET | `/api/data` | All watchers + titles + computed points |
-| GET/PUT | `/api/settings` | Server-side app settings (center image, spin settings, active IDs) |
+| GET/PUT | `/api/settings` | Server-side app settings (spin settings, active IDs) |
 | POST | `/api/watchers` | Create a watcher |
 | DELETE | `/api/watchers/<id>` | Remove a watcher and all titles |
 | PATCH | `/api/watchers/<id>/points` | Adjust points |
